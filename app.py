@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 
 # ── Page Config ───────────────────────────────────────────────────
 st.set_page_config(
-    page_title="INFLASI.AI — Prediksi Inflasi Indonesia",
+    page_title="INFLASI.N-BEATSx — Prediksi Inflasi Indonesia",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -325,31 +325,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Model info
-    try:
-        _, _, _, best, config, _ = load_artifacts()
-        st.markdown("<div class='section-header'>Model Info</div>",
-                    unsafe_allow_html=True)
-        params = [
-            ('input_size',  best['input_size']),
-            ('hidden_size', best['hidden_size']),
-            ('n_blocks',    str(best['n_blocks'])),
-            ('max_steps',   best['max_steps']),
-            ('dropout',     best['dropout']),
-            ('lr',          f"{best['lr']:.5f}"),
-        ]
-        rows_p = "".join([
-            f"<div class='val-row'>"
-            f"<span class='val-key'>{k}</span>"
-            f"<span class='val-val'>{v}</span></div>"
-            for k, v in params
-        ])
-        st.markdown(f"<div class='about-card'>{rows_p}</div>",
-                    unsafe_allow_html=True)
-    except:
-        st.warning("Model belum tersedia")
-
-
 # ═══════════════════════════════════════════════════════════════════
 # PAGE: HOME
 # ═══════════════════════════════════════════════════════════════════
@@ -366,7 +341,7 @@ def page_home():
 
     st.markdown("""
     <div class='info-box'>
-        Selamat datang di <b>INFLASI.AI</b> — sistem prediksi inflasi Indonesia
+        Selamat datang di <b>INFLASI.N-BEATSx</b> — sistem prediksi inflasi Indonesia
         yang dikembangkan menggunakan model <i>deep learning</i> N-BEATSx
         yang dioptimasi dengan Bayesian Optimization dua tahap.
         Sistem ini mampu mengintegrasikan variabel makroekonomi dan efek
@@ -389,7 +364,7 @@ def page_home():
          'melalui grafik interaktif sebelum melakukan prediksi.'),
         ('📈', 'Prediksi Inflasi',
          'Hasil prediksi 6 bulan ke depan disajikan dalam bentuk '
-         'grafik dan tabel, dilengkapi interval kepercayaan ±15%.'),
+         'grafik dan tabel, dilengkapi interval kepercayaan ±10%.'),
     ]
     for col, (icon, title, desc) in zip([c1, c2, c3], features):
         with col:
@@ -1127,7 +1102,7 @@ def page_about():
         specs = [
             ('Arsitektur',      'N-BEATSx (Interpretable)'),
             ('Stack',           'Trend + Seasonality'),
-            ('Optimizer',       'Adam + Bayesian Opt.'),
+            ('Optimizer',       'Bayesian Opt.'),
             ('Periode Data',    'Jan 2010 – Sep 2025'),
             ('Observasi',       '189 bulan'),
             ('Horizon',         '6 bulan ke depan'),
