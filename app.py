@@ -873,7 +873,7 @@ def page_upload():
         "🚀  Jalankan Prediksi Kustom",
         use_container_width=True
     )
-    st.write(fut_df.head())
+    
     if run_pred:
         with st.spinner("Menjalankan prediksi…"):
             try:
