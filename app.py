@@ -266,7 +266,7 @@ with st.sidebar:
     <div style='padding:1rem 0 0.5rem'>
         <div style='font-family:Space Mono,monospace;font-size:1.1rem;
                     font-weight:700;color:#63B3ED;letter-spacing:1px;'>
-            INFLASI.AI
+            INFLASI.N-BEATSx
         </div>
         <div style='font-size:0.72rem;color:#4A5568;margin-top:2px;'>
             N-BEATSx + Bayesian Optimization
@@ -325,111 +325,276 @@ with st.sidebar:
 
     st.divider()
 
+    # Model info
+    try:
+        _, _, _, best, config, _ = load_artifacts()
+        st.markdown("<div class='section-header'>Model Info</div>",
+                    unsafe_allow_html=True)
+        params = [
+            ('input_size',  best['input_size']),
+            ('hidden_size', best['hidden_size']),
+            ('n_blocks',    str(best['n_blocks'])),
+            ('max_steps',   best['max_steps']),
+            ('dropout',     best['dropout']),
+            ('lr',          f"{best['lr']:.5f}"),
+        ]
+        rows_p = "".join([
+            f"<div class='val-row'>"
+            f"<span class='val-key'>{k}</span>"
+            f"<span class='val-val'>{v}</span></div>"
+            for k, v in params
+        ])
+        st.markdown(f"<div class='about-card'>{rows_p}</div>",
+                    unsafe_allow_html=True)
+    except:
+        st.warning("Model belum tersedia")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # PAGE: HOME
 # ═══════════════════════════════════════════════════════════════════
 def page_home():
+    # ── Hero Section ──────────────────────────────────────────────
     st.markdown("""
-    <div class='main-header'>
-        <div class='main-title'>📈 INFLASI.AI</div>
-        <div class='main-subtitle'>
-            Sistem Prediksi Inflasi Indonesia berbasis N-BEATSx
-            dengan Bayesian Optimization
+    <div style='background:linear-gradient(135deg,#0d1117 0%,#1a1f2e 60%,#0d1117 100%);
+                border:1px solid #2D3748;border-radius:20px;
+                padding:3rem 3rem 2.5rem;margin-bottom:1.5rem;position:relative;
+                overflow:hidden;'>
+        <div style='position:absolute;top:-60px;right:-60px;width:320px;height:320px;
+                    background:radial-gradient(circle,rgba(99,179,237,0.07) 0%,transparent 70%);
+                    pointer-events:none;'></div>
+        <div style='position:absolute;bottom:-80px;left:10%;width:280px;height:280px;
+                    background:radial-gradient(circle,rgba(104,211,145,0.05) 0%,transparent 70%);
+                    pointer-events:none;'></div>
+
+        <div style='display:flex;align-items:center;gap:1rem;margin-bottom:1rem;'>
+            <div style='font-size:2.8rem;'>📈</div>
+            <div>
+                <div style='font-family:Space Mono,monospace;font-size:2rem;
+                            font-weight:700;color:#63B3ED;letter-spacing:-0.5px;
+                            line-height:1.1;'>INFLASI.N-BEATSx</div>
+                <div style='font-size:0.85rem;color:#4A5568;margin-top:4px;
+                            font-weight:400;letter-spacing:0.05em;'>
+                    SISTEM PREDIKSI INFLASI INDONESIA
+                </div>
+            </div>
+        </div>
+
+        <div style='font-size:1rem;color:#A0AEC0;line-height:1.8;
+                    max-width:680px;margin-bottom:2rem;'>
+            Sistem prediksi inflasi berbasis model <b style="color:#63B3ED;">N-BEATSx</b>
+            yang dioptimasi dengan <b style="color:#68D391;">Bayesian Optimization</b>
+            dua tahap. Model mengintegrasikan variabel makroekonomi — BI Rate,
+            kurs USD/IDR, dan harga minyak dunia — serta efek kalender hari besar
+            keagamaan untuk menghasilkan prediksi inflasi Indonesia
+            hingga <b style="color:#F6AD55;">6 bulan ke depan</b>.
+        </div>
+
+        <div style='display:flex;gap:0.6rem;flex-wrap:wrap;'>
+            <span style='background:#1A365D;color:#63B3ED;padding:5px 14px;
+                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
+                N-BEATSx · Deep Learning
+            </span>
+            <span style='background:#1C4532;color:#68D391;padding:5px 14px;
+                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
+                Bayesian Optimization · Optuna
+            </span>
+            <span style='background:#3D2800;color:#F6AD55;padding:5px 14px;
+                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
+                Efek Kalender · Variabel Eksogen
+            </span>
+            <span style='background:#322659;color:#B794F4;padding:5px 14px;
+                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
+                Jan 2010 – Sep 2025 · 189 Observasi
+            </span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class='info-box'>
-        Selamat datang di <b>INFLASI.N-BEATSx</b> — sistem prediksi inflasi Indonesia
-        yang dikembangkan menggunakan model <i>deep learning</i> N-BEATSx
-        yang dioptimasi dengan Bayesian Optimization dua tahap.
-        Sistem ini mampu mengintegrasikan variabel makroekonomi dan efek
-        kalender hari besar keagamaan dalam menghasilkan prediksi inflasi
-        hingga 6 bulan ke depan.
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<div class='section-header'>Fitur Utama</div>",
+    # ── KPI Row ───────────────────────────────────────────────────
+    st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
                 unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns(3)
-    features = [
-        ('📂', 'Upload Data',
-         'Unggah data historis inflasi dan variabel makroekonomi '
-         'dalam format CSV atau Excel untuk memulai prediksi.'),
-        ('📊', 'Visualisasi Data',
-         'Eksplorasi pola historis inflasi dan variabel pendukung '
-         'melalui grafik interaktif sebelum melakukan prediksi.'),
-        ('📈', 'Prediksi Inflasi',
-         'Hasil prediksi 6 bulan ke depan disajikan dalam bentuk '
-         'grafik dan tabel, dilengkapi interval kepercayaan ±10%.'),
+    k1, k2, k3, k4, k5 = st.columns(5)
+    kpis = [
+        ("MAE",     "0.00601", "Mean Absolute Error",      "#63B3ED"),
+        ("RMSE",    "0.00834", "Root Mean Squared Error",  "#63B3ED"),
+        ("SMAPE",   "41.76%",  "Symmetric MAPE",           "#F6AD55"),
+        ("Horizon", "6 Bulan", "Prediksi ke depan",        "#68D391"),
+        ("Obs.",    "189",     "Data pelatihan bulanan",   "#B794F4"),
     ]
-    for col, (icon, title, desc) in zip([c1, c2, c3], features):
-        with col:
-            st.markdown(f"""
-            <div class='feature-card'>
-                <div class='feature-icon'>{icon}</div>
-                <div class='feature-title'>{title}</div>
-                <div class='feature-desc'>{desc}</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    c4, c5 = st.columns(2)
-    features2 = [
-        ('🔬', 'Analisis Model',
-         'Lihat metrik evaluasi model (MAE, RMSE, SMAPE), '
-         'perbandingan dengan model baseline, dan hasil uji '
-         'asumsi residual secara lengkap.'),
-        ('👥', 'About Us',
-         'Informasi latar belakang penelitian, tujuan pengembangan '
-         'sistem, dan manfaat penerapan model prediksi inflasi '
-         'dalam mendukung pengambilan kebijakan.'),
-    ]
-    for col, (icon, title, desc) in zip([c4, c5], features2):
-        with col:
-            st.markdown(f"""
-            <div class='feature-card'>
-                <div class='feature-icon'>{icon}</div>
-                <div class='feature-title'>{title}</div>
-                <div class='feature-desc'>{desc}</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<div class='section-header'>Performa Model</div>",
-                unsafe_allow_html=True)
-
-    m1, m2, m3, m4 = st.columns(4)
-    kpi = [
-        ('MAE', '0.00601', 'Data Uji'),
-        ('RMSE', '0.00834', 'Data Uji'),
-        ('SMAPE', '41.76%', 'Data Uji'),
-        ('Horizon', '6 Bulan', 'Prediksi ke depan'),
-    ]
-    for col, (label, val, sub) in zip([m1, m2, m3, m4], kpi):
+    for col, (label, val, sub, color) in zip([k1, k2, k3, k4, k5], kpis):
         with col:
             st.markdown(f"""
             <div class='metric-card'>
                 <div class='metric-label'>{label}</div>
-                <div class='metric-value'>{val}</div>
+                <div class='metric-value' style='color:{color};font-size:1.35rem;'>
+                    {val}
+                </div>
                 <div class='metric-sub'>{sub}</div>
             </div>""", unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
-    <div class='warning-box'>
-        ℹ️ <b>Cara Mulai:</b> Klik <b>Upload Data</b> di menu navigasi kiri
-        untuk mengunggah data, kemudian buka halaman <b>Prediksi Inflasi</b>
-        untuk melihat hasil prediksi. Jika tidak ada data yang diunggah,
-        sistem akan menggunakan data historis bawaan model secara otomatis.
+    <div style='font-size:0.75rem;color:#4A5568;margin-top:6px;margin-bottom:1.5rem;'>
+        * SMAPE dipengaruhi anomali deflasi Februari 2025 (−0.09%).
+        Pada bulan normal, SMAPE model berkisar 6–25%.
+    </div>""", unsafe_allow_html=True)
+
+    # ── Perbandingan Model & Variabel ─────────────────────────────
+    col_cmp, col_var = st.columns(2)
+
+    with col_cmp:
+        st.markdown("<div class='section-header'>Perbandingan Model</div>",
+                    unsafe_allow_html=True)
+        comp = [
+            ("N-BEATSx + BO",   "0.00601", "0.00834", "41.76%", True),
+            ("Prophet",          "0.00487", "0.00592", "43.96%", False),
+            ("SARIMAX",          "0.00717", "0.00905", "46.40%", False),
+            ("N-BEATSx Default", "0.00530", "0.00726", "40.72%", False),
+            ("N-BEATS",          "0.01039", "0.01223", "62.34%", False),
+        ]
+        rows_comp = ""
+        for model, mae, rmse, smape, is_ours in comp:
+            if is_ours:
+                std = "color:#63B3ED;font-weight:700;"
+                sbg = "background:#0d1a2e;"
+                star = " ★"
+            else:
+                std = "color:#A0AEC0;"
+                sbg = ""
+                star = ""
+            rows_comp += f"""
+            <tr style='{sbg}'>
+                <td style='{std}'>{model}{star}</td>
+                <td style='{std}'>{mae}</td>
+                <td style='{std}'>{rmse}</td>
+                <td style='{std}'>{smape}</td>
+            </tr>"""
+        st.markdown(f"""
+        <table class='pred-table'>
+            <tr><th>Model</th><th>MAE ↓</th><th>RMSE ↓</th><th>SMAPE ↓</th></tr>
+            {rows_comp}
+        </table>
+        <div style='font-size:0.73rem;color:#4A5568;margin-top:6px;'>
+            ↓ = semakin kecil semakin baik &nbsp;·&nbsp; ★ = model yang dikembangkan
+        </div>""", unsafe_allow_html=True)
+
+    with col_var:
+        st.markdown("<div class='section-header'>Variabel yang Digunakan</div>",
+                    unsafe_allow_html=True)
+        var_groups = [
+            ("🎯  Target",
+             [("Inflasi Bulanan (y)", "")],
+             "#63B3ED", "#1A365D"),
+            ("📉  Lag Inflasi",
+             [("lag1",""),("lag3",""),("lag6",""),("lag12","")],
+             "#68D391", "#1C4532"),
+            ("🌐  Eksogen Historis",
+             [("BI Rate",""),("Harga Minyak Dunia",""),("Kurs USD/IDR","")],
+             "#F6AD55", "#3D2800"),
+            ("📅  Dummy Kalender",
+             [("Ramadan",""),("Idulfitri",""),("Natal",""),("Imlek","")],
+             "#B794F4", "#322659"),
+        ]
+        for group, items, color, bg in var_groups:
+            badges = " ".join([
+                f"<span style='background:{bg};color:{color};padding:3px 10px;"
+                f"border-radius:12px;font-size:0.75rem;font-weight:600;"
+                f"display:inline-block;margin:2px;'>{name}</span>"
+                for name, _ in items
+            ])
+            st.markdown(f"""
+            <div style='margin-bottom:0.8rem;'>
+                <div style='font-size:0.73rem;color:#4A5568;font-weight:600;
+                            text-transform:uppercase;letter-spacing:0.08em;
+                            margin-bottom:5px;'>{group}</div>
+                {badges}
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>Uji Asumsi Residual</div>",
+                    unsafe_allow_html=True)
+        residuals = [
+            ("Rata-rata Residual",      "ē = −0.004927", "p > 0.05", "✅"),
+            ("Normalitas (Shapiro-Wilk)","W=0.9152",     "p=0.2489", "✅"),
+            ("Autokorelasi (Ljung-Box)","Q=5.2282",      "p=0.5149", "✅"),
+            ("Homoskedastisitas (BP)",  "LM=8.8344",     "p=0.2648", "✅"),
+        ]
+        for test, stat, pval, icon in residuals:
+            st.markdown(f"""
+            <div style='background:#1A202C;border:1px solid #2D3748;
+                        border-radius:8px;padding:0.55rem 0.9rem;
+                        margin-bottom:0.45rem;display:flex;
+                        gap:0.6rem;align-items:center;'>
+                <div style='font-size:0.95rem;'>{icon}</div>
+                <div style='flex:1;'>
+                    <div style='font-size:0.77rem;font-weight:600;
+                                color:#E8EAF0;'>{test}</div>
+                    <div style='font-family:Space Mono,monospace;
+                                font-size:0.7rem;color:#63B3ED;'>{stat} &nbsp;·&nbsp; {pval}</div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Alur Penggunaan ───────────────────────────────────────────
+    st.markdown("<div class='section-header'>Alur Penggunaan Sistem</div>",
+                unsafe_allow_html=True)
+
+    sc1, sc2, sc3 = st.columns(3)
+    steps = [
+        ("01", "📂", "Upload Data",
+         "Unggah file CSV/Excel berisi data inflasi, BI Rate, "
+         "harga minyak dunia, dan kurs USD/IDR.", "upload"),
+        ("02", "📊", "Visualisasi Data",
+         "Eksplorasi pola historis dan tren variabel makroekonomi "
+         "melalui grafik interaktif.", "visualisasi"),
+        ("03", "📈", "Prediksi Inflasi",
+         "Lihat prediksi 6 bulan ke depan dalam bentuk "
+         "grafik, tabel, dan metrik evaluasi model.", "prediksi"),
+    ]
+    for col, (num, icon, title, desc, nav_key) in zip([sc1, sc2, sc3], steps):
+        with col:
+            st.markdown(f"""
+            <div class='feature-card' style='position:relative;'>
+                <div style='position:absolute;top:1rem;right:1rem;
+                            font-family:Space Mono,monospace;
+                            font-size:0.7rem;color:#2D3748;font-weight:700;'>
+                    {num}
+                </div>
+                <div style='font-size:2rem;margin-bottom:0.5rem;'>{icon}</div>
+                <div class='feature-title'>{title}</div>
+                <div class='feature-desc'>{desc}</div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button(f"Buka {title} →", key=f"home_nav_{num}",
+                         use_container_width=True):
+                st.session_state.page = nav_key
+                st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Footer Note ───────────────────────────────────────────────
+    st.markdown("""
+    <div style='background:#1A202C;border:1px solid #2D3748;border-radius:12px;
+                padding:1.2rem 1.5rem;display:flex;gap:1rem;align-items:flex-start;'>
+        <div style='font-size:1.3rem;'>ℹ️</div>
+        <div>
+            <div style='font-size:0.85rem;font-weight:600;color:#E8EAF0;
+                        margin-bottom:4px;'>Cara Mulai</div>
+            <div style='font-size:0.82rem;color:#718096;line-height:1.7;'>
+                Klik <b style="color:#63B3ED;">Upload Data</b> di sidebar kiri
+                untuk mengunggah data historis terbaru, lalu buka halaman
+                <b style="color:#63B3ED;">Prediksi Inflasi</b> untuk melihat
+                proyeksi 6 bulan ke depan. Jika tidak ada data yang diunggah,
+                sistem akan menggunakan data bawaan model (Jan 2010 – Sep 2025)
+                secara otomatis.
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# PAGE: UPLOAD DATA
-# ═══════════════════════════════════════════════════════════════════
 def page_upload():
     st.markdown("""
     <div class='main-header'>
@@ -1102,7 +1267,7 @@ def page_about():
         specs = [
             ('Arsitektur',      'N-BEATSx (Interpretable)'),
             ('Stack',           'Trend + Seasonality'),
-            ('Optimizer',       'Bayesian Opt.'),
+            ('Optimizer',       'Adam + Bayesian Opt.'),
             ('Periode Data',    'Jan 2010 – Sep 2025'),
             ('Observasi',       '189 bulan'),
             ('Horizon',         '6 bulan ke depan'),
