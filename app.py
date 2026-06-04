@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 
 # ── Page Config ───────────────────────────────────────────────────
 st.set_page_config(
-    page_title="INFLASI.AI — Prediksi Inflasi Indonesia",
+    page_title="INFLASI.N-BEATSx — Prediksi Inflasi Indonesia",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -266,7 +266,7 @@ with st.sidebar:
     <div style='padding:1rem 0 0.5rem'>
         <div style='font-family:Space Mono,monospace;font-size:1.1rem;
                     font-weight:700;color:#63B3ED;letter-spacing:1px;'>
-            INFLASI.AI
+            INFLASI.N-BEATSx
         </div>
         <div style='font-size:0.72rem;color:#4A5568;margin-top:2px;'>
             N-BEATSx + Bayesian Optimization
@@ -324,31 +324,6 @@ with st.sidebar:
         </div>""", unsafe_allow_html=True)
 
     st.divider()
-
-    # Model info
-    try:
-        _, _, _, best, config, _ = load_artifacts()
-        st.markdown("<div class='section-header'>Model Info</div>",
-                    unsafe_allow_html=True)
-        params = [
-            ('input_size',  best['input_size']),
-            ('hidden_size', best['hidden_size']),
-            ('n_blocks',    str(best['n_blocks'])),
-            ('max_steps',   best['max_steps']),
-            ('dropout',     best['dropout']),
-            ('lr',          f"{best['lr']:.5f}"),
-        ]
-        rows_p = "".join([
-            f"<div class='val-row'>"
-            f"<span class='val-key'>{k}</span>"
-            f"<span class='val-val'>{v}</span></div>"
-            for k, v in params
-        ])
-        st.markdown(f"<div class='about-card'>{rows_p}</div>",
-                    unsafe_allow_html=True)
-    except:
-        st.warning("Model belum tersedia")
-
 
 # ═══════════════════════════════════════════════════════════════════
 # PAGE: HOME
@@ -780,7 +755,13 @@ def page_upload():
     # ── Input eksogen per bulan ───────────────────────────────────
     st.markdown("**Variabel Makroekonomi per Bulan Prediksi**")
 
-    last_bi    = float(use_data["BI Rate"].iloc[-1])                  if "BI Rate" in use_data.columns else 0.06
+    last_bi = (float(use_data["BI Rate"].iloc[-1]) if "BI Rate" in use_data.columns
+    else 5.25)
+
+    if pd.isna(last_bi):
+        last_bi = 5.25
+
+    last_bi = max(0.0, min(last_bi, 25.0))
     last_oil   = float(use_data["Harga Minyak Dunia"].iloc[-1])                  if "Harga Minyak Dunia" in use_data.columns else 75.0
     last_kurs  = float(use_data["Kurs USD/IDR"].iloc[-1])                  if "Kurs USD/IDR" in use_data.columns else 15500.0
 
