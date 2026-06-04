@@ -787,7 +787,7 @@ def page_upload():
     exog_inputs = {}
     header_cols = st.columns([1.6, 1, 1, 1])
     header_cols[0].markdown("**Bulan**")
-    header_cols[1].markdown("**BI Rate**")
+    header_cols[1].markdown("**BI Rate (%)**")
     header_cols[2].markdown("**Minyak (USD)**")
     header_cols[3].markdown("**Kurs USD/IDR**")
 
@@ -800,8 +800,8 @@ def page_upload():
             unsafe_allow_html=True
         )
         bi  = row[1].number_input(
-            f"bi_{i}", value=last_bi, min_value=0.0,
-            max_value=1.0, step=0.0025, format="%.4f",
+            f"bi_{i}", value=float(last_bi), min_value=0.0,
+            max_value=25.0, step=0.25, format="%.2f",
             label_visibility="collapsed", key=f"bi_{i}"
         )
         oil = row[2].number_input(
@@ -814,6 +814,7 @@ def page_upload():
             max_value=99999.0, step=50.0, format="%.0f",
             label_visibility="collapsed", key=f"kurs_{i}"
         )
+        # Simpan BI Rate dalam %, konversi ke desimal saat dipakai model
         exog_inputs[i] = {"BI Rate": bi,
                           "Harga Minyak Dunia": oil,
                           "Kurs USD/IDR": kurs}
@@ -882,8 +883,17 @@ def page_upload():
                 df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
 
                 # Build future df dari input user
+                # Deteksi format BI Rate di data historis (desimal atau %)
+                _bi_sample = float(use_data["BI Rate"].iloc[-1]) \
+                             if "BI Rate" in use_data.columns else 6.0
+                _bi_is_pct = _bi_sample > 1.0  # True jika data asli dalam %
+
                 fut_rows = []
                 for i, fdate in enumerate(future_dates):
+                    # Konversi BI Rate ke format yang sama dengan data training
+                    bi_val = exog_inputs[i]["BI Rate"]          # dalam %
+                    if not _bi_is_pct:
+                        bi_val = bi_val / 100.0                  # ke desimal
                     row = {
                         "unique_id": "inflasi",
                         "ds":        fdate,
@@ -1013,7 +1023,7 @@ def page_upload():
                         f"<td>{pd.to_datetime(d).strftime('%b %Y')}</td>"
                         f"<td style='color:{color};font-weight:600;'>"
                         f"{pct:.4f}%</td>"
-                        f"<td>{exog['BI Rate']*100:.2f}%</td>"
+                        f"<td>{exog['BI Rate']:.2f}%</td>"
                         f"<td>{exog['Harga Minyak Dunia']:.1f}</td>"
                         f"<td>{exog['Kurs USD/IDR']:,.0f}</td>"
                         f"</tr>"
