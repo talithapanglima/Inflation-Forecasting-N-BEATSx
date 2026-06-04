@@ -607,171 +607,470 @@ def page_home():
 
 
 def page_upload():
-    st.markdown("""
-    <div class='main-header'>
-        <div class='main-title'>📂 Upload Data</div>
-        <div class='main-subtitle'>
-            Unggah dataset inflasi dan variabel eksogen untuk prediksi
+    st.markdown(
+        """
+        <div class="main-header">
+            <div class="main-title">📂 Upload Data</div>
+            <div class="main-subtitle">
+                Unggah dataset, atur variabel eksogen, dan jalankan prediksi kustom
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
 
-    col_left, col_right = st.columns([1.2, 1])
-
-    with col_left:
-        st.markdown("<div class='section-header'>Unggah File</div>",
-                    unsafe_allow_html=True)
-        st.markdown("""
-        <div class='info-box'>
-            <b>Format yang didukung:</b> CSV (.csv) dan Excel (.xlsx)<br>
-            <b>Ukuran maksimal:</b> 200 MB per file<br>
-            <b>Frekuensi data:</b> Bulanan (minimum 13 baris untuk lag-12)
+    # ── STEP 1: Upload File ───────────────────────────────────────
+    st.markdown(
+        "<div class='section-header'>① Unggah File Data</div>",
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        """
+        <div class="info-box">
+            <b>Format:</b> CSV (.csv) atau Excel (.xlsx) &nbsp;·&nbsp;
+            <b>Maks:</b> 200 MB &nbsp;·&nbsp;
+            <b>Frekuensi:</b> Bulanan (min. 13 baris)
         </div>
-        """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
 
+    c_up, c_fmt = st.columns([1.2, 1])
+
+    with c_up:
         uploaded = st.file_uploader(
             "Pilih file CSV atau Excel",
-            type=['csv', 'xlsx'],
-            label_visibility='collapsed'
+            type=["csv", "xlsx"],
+            label_visibility="collapsed"
         )
 
         if uploaded is not None:
             try:
-                if uploaded.name.endswith('.csv'):
-                    raw = pd.read_csv(uploaded)
-                else:
-                    raw = pd.read_excel(uploaded)
-
+                raw = pd.read_csv(uploaded) if uploaded.name.endswith(".csv")                       else pd.read_excel(uploaded)
                 raw = normalize_columns(raw)
 
-                if not validate_columns(raw):
-                    missing = {'ds', 'y', 'BI Rate',
-                               'Harga Minyak Dunia',
-                               'Kurs USD/IDR'} - set(raw.columns)
-                    st.markdown(f"""
-                    <div class='error-box'>
-                        ❌ <b>Kolom tidak lengkap.</b><br>
-                        Kolom yang belum ditemukan: {', '.join(missing)}<br>
-                        Periksa nama kolom dan coba lagi.
-                    </div>""", unsafe_allow_html=True)
-                    st.session_state.uploaded_df = None
-                    st.session_state.upload_status = 'error'
+                missing = {"ds", "y", "BI Rate",
+                           "Harga Minyak Dunia", "Kurs USD/IDR"} - set(raw.columns)
+                if missing:
+                    st.error(f"❌ Kolom tidak lengkap: **{', '.join(missing)}**")
+                    st.session_state.uploaded_df    = None
+                    st.session_state.upload_status  = "error"
                 else:
-                    raw['ds'] = pd.to_datetime(raw['ds'])
-                    raw = raw.sort_values('ds').reset_index(drop=True)
-                    st.session_state.uploaded_df = raw
-                    st.session_state.upload_status = 'ok'
-                    st.markdown(f"""
-                    <div class='success-box'>
-                        ✅ <b>Data berhasil diunggah!</b><br>
-                        {len(raw)} baris ·
-                        {pd.to_datetime(raw['ds'].min()).strftime('%b %Y')} –
-                        {pd.to_datetime(raw['ds'].max()).strftime('%b %Y')}
-                    </div>""", unsafe_allow_html=True)
-
+                    raw["ds"] = pd.to_datetime(raw["ds"])
+                    raw = raw.sort_values("ds").reset_index(drop=True)
+                    st.session_state.uploaded_df    = raw
+                    st.session_state.upload_status  = "ok"
+                    st.success(
+                        f"✅ Data berhasil diunggah — "
+                        f"{len(raw)} baris · "
+                        f"{raw['ds'].min().strftime('%b %Y')} – "
+                        f"{raw['ds'].max().strftime('%b %Y')}"
+                    )
             except Exception as e:
-                st.markdown(f"""
-                <div class='error-box'>
-                    ❌ Gagal membaca file: {e}
-                </div>""", unsafe_allow_html=True)
+                st.error(f"❌ Gagal membaca file: {e}")
                 st.session_state.uploaded_df = None
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='section-header'>Format Kolom yang Diperlukan</div>",
-                    unsafe_allow_html=True)
-
-        cols_info = [
-            ('ds / Date / Tanggal', 'Tanggal', 'YYYY-MM-DD atau DD/MM/YYYY', True),
-            ('y / Inflasi / Inflasi Umum', 'Target', 'Desimal (contoh: 0.0265 = 2.65%)', True),
-            ('BI Rate', 'Eksogen', 'Suku bunga kebijakan (desimal)', True),
-            ('Harga Minyak Dunia', 'Eksogen', 'Harga dalam USD per barel', True),
-            ('Kurs USD/IDR', 'Eksogen', 'Nilai tukar Rupiah terhadap USD', True),
-        ]
-        rows_col = ""
-        for name, tipe, fmt, req in cols_info:
-            badge_col = "badge-blue" if tipe == 'Target' else \
-                        "badge-green" if tipe == 'Eksogen' else "badge-yellow"
-            req_mark = "✱" if req else ""
-            rows_col += f"""
-            <tr>
-                <td><code style='color:#63B3ED;font-size:0.78rem;'>{name}</code>
-                    {req_mark}</td>
-                <td><span class='badge {badge_col}'>{tipe}</span></td>
-                <td style='color:#718096;font-size:0.78rem;'>{fmt}</td>
-            </tr>"""
-        st.markdown(f"""
-        <table class='pred-table'>
-            <tr><th>Nama Kolom</th><th>Tipe</th><th>Format</th></tr>
-            {rows_col}
-        </table>
-        <div style='font-size:0.72rem;color:#4A5568;margin-top:6px;'>
-            ✱ Wajib ada · Nama kolom tidak peka huruf besar/kecil
-        </div>""", unsafe_allow_html=True)
-
-    with col_right:
-        st.markdown("<div class='section-header'>Preview Data</div>",
-                    unsafe_allow_html=True)
 
         if st.session_state.uploaded_df is not None:
             df_show = st.session_state.uploaded_df
             show_cols = [c for c in
-                ['ds', 'y', 'BI Rate', 'Harga Minyak Dunia', 'Kurs USD/IDR']
+                ["ds","y","BI Rate","Harga Minyak Dunia","Kurs USD/IDR"]
                 if c in df_show.columns]
             st.dataframe(
-                df_show[show_cols].tail(10).style.format({
-                    'y': '{:.4f}',
-                    'BI Rate': '{:.4f}',
-                    'Harga Minyak Dunia': '{:.2f}',
-                    'Kurs USD/IDR': '{:.0f}',
+                df_show[show_cols].tail(8).style.format({
+                    "y": "{:.4f}", "BI Rate": "{:.4f}",
+                    "Harga Minyak Dunia": "{:.2f}", "Kurs USD/IDR": "{:.0f}",
                 }),
-                use_container_width=True, height=320
+                use_container_width=True, height=260
             )
-            st.markdown(f"""
-            <div class='val-row' style='margin-top:8px;'>
-                <span class='val-key'>Total observasi</span>
-                <span class='val-val'>{len(df_show)}</span>
-            </div>
-            <div class='val-row'>
-                <span class='val-key'>Periode awal</span>
-                <span class='val-val'>
-                    {pd.to_datetime(df_show['ds'].min()).strftime('%B %Y')}
-                </span>
-            </div>
-            <div class='val-row'>
-                <span class='val-key'>Periode akhir</span>
-                <span class='val-val'>
-                    {pd.to_datetime(df_show['ds'].max()).strftime('%B %Y')}
-                </span>
-            </div>
-            <div class='val-row'>
-                <span class='val-key'>Nilai inflasi terbaru</span>
-                <span class='val-val'>
-                    {df_show['y'].iloc[-1]*100:.4f}%
-                </span>
-            </div>""", unsafe_allow_html=True)
-
-            if st.button("🗑️ Hapus data & gunakan data bawaan"):
-                st.session_state.uploaded_df = None
+            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+            with col_s1:
+                st.metric("Total Baris", len(df_show))
+            with col_s2:
+                st.metric("Periode Awal", df_show["ds"].min().strftime("%b %Y"))
+            with col_s3:
+                st.metric("Periode Akhir", df_show["ds"].max().strftime("%b %Y"))
+            with col_s4:
+                st.metric("Inflasi Terakhir",
+                          f"{df_show['y'].iloc[-1]*100:.2f}%")
+            if st.button("🗑️  Hapus & gunakan data bawaan",
+                         use_container_width=True):
+                st.session_state.uploaded_df   = None
                 st.session_state.upload_status = None
                 st.rerun()
-        else:
-            st.markdown("""
-            <div style='background:#1A202C;border:1px dashed #2D3748;
-                        border-radius:12px;padding:3rem;text-align:center;'>
-                <div style='font-size:2.5rem;margin-bottom:0.5rem;'>📋</div>
-                <div style='color:#4A5568;font-size:0.85rem;'>
-                    Belum ada data diunggah.<br>
-                    Upload file di sebelah kiri.
-                </div>
-            </div>""", unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class='warning-box'>
-            <b>Catatan:</b> Jika tidak ada data yang diunggah, sistem akan
-            menggunakan data historis bawaan model (Jan 2010 – Sep 2025)
-            secara otomatis untuk menghasilkan prediksi.
-        </div>""", unsafe_allow_html=True)
+    with c_fmt:
+        st.markdown(
+            "<div class='section-header'>Format Kolom yang Diperlukan</div>",
+            unsafe_allow_html=True
+        )
+        cols_info = [
+            ("ds / Date / Tanggal",       "Waktu",   "YYYY-MM-DD"),
+            ("y / Inflasi / Inflasi Umum","Target",  "Desimal (0.0265 = 2.65%)"),
+            ("BI Rate",                   "Eksogen", "Desimal"),
+            ("Harga Minyak Dunia",        "Eksogen", "USD/barel"),
+            ("Kurs USD/IDR",              "Eksogen", "Nilai tukar"),
+        ]
+        badge_map = {"Waktu": "#3D2800|#F6AD55",
+                     "Target": "#1A365D|#63B3ED",
+                     "Eksogen": "#1C4532|#68D391"}
+        rows_fmt = ""
+        for name, tipe, fmt in cols_info:
+            bg, fg = badge_map[tipe].split("|")
+            rows_fmt += (
+                f"<tr>"
+                f"<td><code style='color:#63B3ED;font-size:0.78rem;'>{name}</code> ✱</td>"
+                f"<td><span style='background:{bg};color:{fg};padding:2px 8px;"
+                f"border-radius:10px;font-size:0.72rem;font-weight:600;'>{tipe}</span></td>"
+                f"<td style='color:#718096;font-size:0.77rem;'>{fmt}</td>"
+                f"</tr>"
+            )
+        st.markdown(
+            f"""
+            <table class="pred-table">
+                <tr><th>Nama Kolom</th><th>Tipe</th><th>Format</th></tr>
+                {rows_fmt}
+            </table>
+            <div style="font-size:0.72rem;color:#4A5568;margin-top:6px;">
+                ✱ Wajib · Nama kolom tidak peka huruf besar/kecil
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            """
+            <div class="warning-box" style="margin-top:1rem;">
+                Jika tidak ada data diunggah, sistem menggunakan data bawaan
+                model (Jan 2010 – Sep 2025) secara otomatis.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.divider()
+
+    # ── STEP 2: Konfigurasi Prediksi Kustom ──────────────────────
+    st.markdown(
+        "<div class='section-header'>② Konfigurasi Prediksi Kustom (6 Bulan ke Depan)</div>",
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        """
+        <div class="info-box">
+            Atur nilai variabel eksogen makroekonomi dan dummy kalender
+            untuk setiap bulan prediksi. Klik <b>Jalankan Prediksi</b>
+            setelah semua nilai diisi.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    try:
+        nf, scaler_y, scaler_exog, best, config, full_data = load_artifacts()
+    except Exception as e:
+        st.error(f"❌ Gagal memuat model: {e}")
+        return
+
+    use_data = st.session_state.uploaded_df                if st.session_state.uploaded_df is not None else full_data
+    last_date = pd.to_datetime(use_data["ds"].max())
+    future_dates = pd.date_range(
+        start=last_date + pd.DateOffset(months=1), periods=6, freq="MS"
+    )
+
+    # ── Input eksogen per bulan ───────────────────────────────────
+    st.markdown("**Variabel Makroekonomi per Bulan Prediksi**")
+
+    last_bi    = float(use_data["BI Rate"].iloc[-1])                  if "BI Rate" in use_data.columns else 0.06
+    last_oil   = float(use_data["Harga Minyak Dunia"].iloc[-1])                  if "Harga Minyak Dunia" in use_data.columns else 75.0
+    last_kurs  = float(use_data["Kurs USD/IDR"].iloc[-1])                  if "Kurs USD/IDR" in use_data.columns else 15500.0
+
+    exog_inputs = {}
+    header_cols = st.columns([1.6, 1, 1, 1])
+    header_cols[0].markdown("**Bulan**")
+    header_cols[1].markdown("**BI Rate**")
+    header_cols[2].markdown("**Minyak (USD)**")
+    header_cols[3].markdown("**Kurs USD/IDR**")
+
+    for i, fdate in enumerate(future_dates):
+        row = st.columns([1.6, 1, 1, 1])
+        row[0].markdown(
+            f"<div style='padding:0.5rem 0;font-size:0.85rem;"
+            f"font-weight:600;color:#E8EAF0;'>"
+            f"{fdate.strftime('%B %Y')}</div>",
+            unsafe_allow_html=True
+        )
+        bi  = row[1].number_input(
+            f"bi_{i}", value=last_bi, min_value=0.0,
+            max_value=1.0, step=0.0025, format="%.4f",
+            label_visibility="collapsed", key=f"bi_{i}"
+        )
+        oil = row[2].number_input(
+            f"oil_{i}", value=last_oil, min_value=0.0,
+            max_value=500.0, step=0.5, format="%.2f",
+            label_visibility="collapsed", key=f"oil_{i}"
+        )
+        kurs = row[3].number_input(
+            f"kurs_{i}", value=last_kurs, min_value=0.0,
+            max_value=99999.0, step=50.0, format="%.0f",
+            label_visibility="collapsed", key=f"kurs_{i}"
+        )
+        exog_inputs[i] = {"BI Rate": bi,
+                          "Harga Minyak Dunia": oil,
+                          "Kurs USD/IDR": kurs}
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("**Dummy Kalender (centang jika bulan tersebut ada hari besar)**")
+
+    dummy_inputs = {}
+    d_header = st.columns([1.6, 1, 1, 1, 1])
+    d_header[0].markdown("**Bulan**")
+    d_header[1].markdown("**Ramadan**")
+    d_header[2].markdown("**Idulfitri**")
+    d_header[3].markdown("**Natal**")
+    d_header[4].markdown("**Imlek**")
+
+    # Default otomatis berdasarkan bulan
+    def default_dummy(dt):
+        m = dt.month
+        return {
+            "Ramadhan":  1 if m == 3 else 0,
+            "Idulfitri": 1 if m == 4 else 0,
+            "Natal":     1 if m == 12 else 0,
+            "Imlek":     1 if m == 1 else 0,
+        }
+
+    for i, fdate in enumerate(future_dates):
+        d_def = default_dummy(fdate)
+        row   = st.columns([1.6, 1, 1, 1, 1])
+        row[0].markdown(
+            f"<div style='padding:0.5rem 0;font-size:0.85rem;"
+            f"font-weight:600;color:#E8EAF0;'>"
+            f"{fdate.strftime('%B %Y')}</div>",
+            unsafe_allow_html=True
+        )
+        ram  = row[1].checkbox("", value=bool(d_def["Ramadhan"]),
+                               key=f"ram_{i}")
+        idl  = row[2].checkbox("", value=bool(d_def["Idulfitri"]),
+                               key=f"idl_{i}")
+        nat  = row[3].checkbox("", value=bool(d_def["Natal"]),
+                               key=f"nat_{i}")
+        iml  = row[4].checkbox("", value=bool(d_def["Imlek"]),
+                               key=f"iml_{i}")
+        dummy_inputs[i] = {
+            "Ramadhan":  int(ram), "Idulfitri": int(idl),
+            "Natal":     int(nat), "Imlek":     int(iml),
+        }
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Tombol Prediksi ───────────────────────────────────────────
+    col_btn, _ = st.columns([1, 3])
+    run_pred = col_btn.button(
+        "🚀  Jalankan Prediksi Kustom",
+        use_container_width=True
+    )
+
+    if run_pred:
+        with st.spinner("Menjalankan prediksi…"):
+            try:
+                df_feat = build_features(
+                    use_data[["ds","y","BI Rate",
+                              "Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
+                    config
+                )
+                num_cols  = config["num_cols"]
+                df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
+
+                # Build future df dari input user
+                fut_rows = []
+                for i, fdate in enumerate(future_dates):
+                    row = {
+                        "unique_id": "inflasi",
+                        "ds":        fdate,
+                        "Ramadhan":  dummy_inputs[i]["Ramadhan"],
+                        "Idulfitri": dummy_inputs[i]["Idulfitri"],
+                        "Natal":     dummy_inputs[i]["Natal"],
+                        "Imlek":     dummy_inputs[i]["Imlek"],
+                    }
+                    fut_rows.append(row)
+                fut_df = pd.DataFrame(fut_rows)
+
+                forecast  = nf.predict(df=df_scaled, futr_df=fut_df)
+                pred_vals = scaler_y.inverse_transform(
+                    forecast[["NBEATSx"]]).flatten()
+
+                # Simpan ke session state
+                st.session_state["custom_pred_vals"]  = pred_vals
+                st.session_state["custom_pred_dates"] = future_dates
+                st.session_state["custom_exog"]       = exog_inputs
+                st.session_state["custom_dummy"]       = dummy_inputs
+                pred_ok = True
+            except Exception as e:
+                st.error(f"❌ Prediksi gagal: {e}")
+                pred_ok = False
+
+        if pred_ok:
+            pred_vals    = st.session_state["custom_pred_vals"]
+            future_dates_res = st.session_state["custom_pred_dates"]
+
+            st.divider()
+            st.markdown(
+                "<div class='section-header'>③ Hasil Prediksi Kustom</div>",
+                unsafe_allow_html=True
+            )
+
+            # Metrik ringkas
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            trend_dir = "↑ Naik" if pred_vals[-1] > pred_vals[0] else "↓ Turun"
+            trend_col = "#68D391" if pred_vals[-1] > pred_vals[0] else "#FC8181"
+            for col, (lbl, val) in zip(
+                [mc1, mc2, mc3, mc4],
+                [("Prediksi Bulan 1",
+                  f"{pred_vals[0]*100:.2f}%"),
+                 ("Rata-rata 6 Bulan",
+                  f"{np.mean(pred_vals)*100:.2f}%"),
+                 ("Tertinggi",
+                  f"{np.max(pred_vals)*100:.2f}%"),
+                 ("Terendah",
+                  f"{np.min(pred_vals)*100:.2f}%")]
+            ):
+                col.markdown(
+                    f"""<div class="metric-card">
+                        <div class="metric-label">{lbl}</div>
+                        <div class="metric-value" style="font-size:1.2rem;">{val}</div>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            res_left, res_right = st.columns([1.5, 1])
+
+            with res_left:
+                # Grafik
+                import matplotlib.pyplot as plt
+                import matplotlib.dates as mdates
+                set_dark_style()
+                hist_y  = scaler_y.inverse_transform(
+                    df_scaled[["y"]]).flatten()[-24:]
+                hist_ds = df_feat["ds"].values[-24:]
+
+                fig, ax = plt.subplots(figsize=(9, 4))
+                ax.plot(hist_ds, hist_y * 100,
+                        color="#63B3ED", linewidth=1.8,
+                        marker="o", markersize=3, label="Aktual")
+                ax.plot([hist_ds[-1], future_dates_res[0]],
+                        [hist_y[-1]*100, pred_vals[0]*100],
+                        color="#F6AD55", linewidth=1.5,
+                        linestyle="--", alpha=0.5)
+                ax.plot(future_dates_res, pred_vals * 100,
+                        color="#F6AD55", linewidth=2,
+                        marker="s", markersize=5, label="Prediksi Kustom")
+                ax.fill_between(future_dates_res,
+                                pred_vals * 100 * 0.85,
+                                pred_vals * 100 * 1.15,
+                                alpha=0.1, color="#F6AD55")
+                for d, v in zip(future_dates_res, pred_vals):
+                    ax.annotate(
+                        f"{v*100:.2f}%", xy=(d, v*100),
+                        xytext=(0, 10), textcoords="offset points",
+                        fontsize=7.5, color="#F6AD55",
+                        ha="center", fontfamily="monospace"
+                    )
+                ax.axvline(x=pd.to_datetime(last_date),
+                           color="#4A5568", linewidth=1,
+                           linestyle=":", alpha=0.8)
+                ax.set_ylabel("Inflasi (%)")
+                ax.yaxis.set_major_formatter(
+                    plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+                ax.xaxis.set_major_locator(
+                    mdates.MonthLocator(interval=3))
+                plt.setp(ax.xaxis.get_majorticklabels(),
+                         rotation=30, ha="right")
+                ax.legend(fontsize=9, framealpha=0.3,
+                          facecolor="#1A202C", edgecolor="#2D3748")
+                ax.grid(True, alpha=0.4)
+                ax.set_title(
+                    "Prediksi Inflasi Kustom — N-BEATSx",
+                    fontsize=10, pad=10, color="#E8EAF0",
+                    fontfamily="monospace"
+                )
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+
+            with res_right:
+                # Tabel hasil
+                rows_r = ""
+                for i, (d, v) in enumerate(
+                    zip(future_dates_res, pred_vals)
+                ):
+                    pct   = v * 100
+                    color = "#68D391" if pct < 3 else                             "#F6AD55" if pct < 5 else "#FC8181"
+                    exog  = exog_inputs[i]
+                    rows_r += (
+                        f"<tr>"
+                        f"<td>{pd.to_datetime(d).strftime('%b %Y')}</td>"
+                        f"<td style='color:{color};font-weight:600;'>"
+                        f"{pct:.4f}%</td>"
+                        f"<td>{exog['BI Rate']*100:.2f}%</td>"
+                        f"<td>{exog['Harga Minyak Dunia']:.1f}</td>"
+                        f"<td>{exog['Kurs USD/IDR']:,.0f}</td>"
+                        f"</tr>"
+                    )
+                st.markdown(
+                    f"""
+                    <table class="pred-table">
+                        <tr>
+                            <th>Bulan</th>
+                            <th>Prediksi</th>
+                            <th>BI Rate</th>
+                            <th>Minyak</th>
+                            <th>Kurs</th>
+                        </tr>
+                        {rows_r}
+                    </table>
+                    """,
+                    unsafe_allow_html=True
+                )
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Download
+                dl_data = {
+                    "Periode": [
+                        pd.to_datetime(d).strftime("%Y-%m")
+                        for d in future_dates_res
+                    ],
+                    "Prediksi_Inflasi_%": [
+                        f"{v*100:.4f}" for v in pred_vals
+                    ],
+                    "BI_Rate": [
+                        exog_inputs[i]["BI Rate"]
+                        for i in range(6)
+                    ],
+                    "Harga_Minyak": [
+                        exog_inputs[i]["Harga Minyak Dunia"]
+                        for i in range(6)
+                    ],
+                    "Kurs_USDIDR": [
+                        exog_inputs[i]["Kurs USD/IDR"]
+                        for i in range(6)
+                    ],
+                }
+                st.download_button(
+                    "⬇️ Download Hasil (CSV)",
+                    pd.DataFrame(dl_data).to_csv(
+                        index=False).encode("utf-8"),
+                    file_name="prediksi_kustom.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+    elif "custom_pred_vals" in st.session_state:
+        # Tampilkan hasil prediksi terakhir jika sudah pernah dijalankan
+        st.info("ℹ️ Menampilkan hasil prediksi terakhir. "
+                "Ubah nilai di atas dan klik 'Jalankan Prediksi' untuk memperbarui.")
+
 
 
 # ═══════════════════════════════════════════════════════════════════
