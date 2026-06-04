@@ -429,7 +429,6 @@ def page_home():
             ("N-BEATSx + BO ★", "0.00601", "0.00834", "41.76%", True),
             ("Prophet",          "0.00487", "0.00592", "43.96%", False),
             ("SARIMAX",          "0.00717", "0.00905", "46.40%", False),
-            ("N-BEATSx Default", "0.00530", "0.00726", "40.72%", False),
             ("N-BEATS",          "0.01039", "0.01223", "62.34%", False),
         ]
         rows_comp = ""
@@ -917,8 +916,7 @@ def page_upload():
                     fut_rows.append(row)
 
                 fut_df = pd.DataFrame(fut_rows)
-                st.write("Future DF")
-                st.dataframe(fut_df.head())
+            
                 forecast  = nf.predict(df=df_scaled, futr_df=fut_df)
                 pred_vals = scaler_y.inverse_transform(
                     forecast[["NBEATSx"]]).flatten()
@@ -1453,11 +1451,11 @@ def page_prediksi():
         st.markdown("<div class='section-header'>Perbandingan Model</div>",
                     unsafe_allow_html=True)
         comp_data = {
-            'Model':  ['N-BEATSx + BO ★', 'N-BEATSx Default',
+            'Model':  ['N-BEATSx + BO ★',
                        'Prophet', 'SARIMAX', 'N-BEATS'],
-            'MAE':    ['0.00601', '0.00530', '0.00487', '0.00717', '0.01039'],
-            'RMSE':   ['0.00834', '0.00726', '0.00592', '0.00905', '0.01223'],
-            'SMAPE':  ['41.76%',  '40.72%',  '43.96%',  '46.40%',  '62.34%'],
+            'MAE':    ['0.00601', '0.00487', '0.00717', '0.01039'],
+            'RMSE':   ['0.00834', '0.00592', '0.00905', '0.01223'],
+            'SMAPE':  ['41.76%',  '43.96%',  '46.40%',  '62.34%'],
         }
         rows_c = ""
         for i in range(len(comp_data['Model'])):
