@@ -892,22 +892,33 @@ def page_upload():
                 _bi_is_pct = _bi_sample > 1.0  # True jika data asli dalam %
 
                 fut_rows = []
+
                 for i, fdate in enumerate(future_dates):
-                    # Konversi BI Rate ke format yang sama dengan data training
-                    bi_val = exog_inputs[i]["BI Rate"]          # dalam %
+
+                    bi_val = exog_inputs[i]["BI Rate"]
+
                     if not _bi_is_pct:
-                        bi_val = bi_val / 100.0                  # ke desimal
+                        bi_val = bi_val / 100.0
+
                     row = {
                         "unique_id": "inflasi",
-                        "ds":        fdate,
-                        "Ramadhan":  dummy_inputs[i]["Ramadhan"],
-                        "Idulfitri": dummy_inputs[i]["Idulfitri"],
-                        "Natal":     dummy_inputs[i]["Natal"],
-                        "Imlek":     dummy_inputs[i]["Imlek"],
-                    }
-                    fut_rows.append(row)
-                fut_df = pd.DataFrame(fut_rows)
+                        "ds": fdate,
 
+                        "BI Rate": bi_val,
+                        "Harga Minyak Dunia": exog_inputs[i]["Harga Minyak Dunia"],
+                        "Kurs USD/IDR": exog_inputs[i]["Kurs USD/IDR"],
+
+                        "Ramadhan": dummy_inputs[i]["Ramadhan"],
+                        "Idulfitri": dummy_inputs[i]["Idulfitri"],
+                        "Natal": dummy_inputs[i]["Natal"],
+                        "Imlek": dummy_inputs[i]["Imlek"],
+                    }
+
+                    fut_rows.append(row)
+
+                fut_df = pd.DataFrame(fut_rows)
+                st.write("Future DF")
+                st.dataframe(fut_df.head())
                 forecast  = nf.predict(df=df_scaled, futr_df=fut_df)
                 pred_vals = scaler_y.inverse_transform(
                     forecast[["NBEATSx"]]).flatten()
