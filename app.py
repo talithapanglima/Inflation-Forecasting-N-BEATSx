@@ -754,23 +754,18 @@ def page_upload():
 
     # ── Input eksogen per bulan ───────────────────────────────────
     st.markdown("**Variabel Makroekonomi per Bulan Prediksi**")
-
-    last_bi = (
-    float(use_data["BI Rate"].iloc[-1])
-    if "BI Rate" in use_data.columns
+    st.write("DEBUG BI:", last_bi)
+    st.write("DEBUG OIL:", last_oil)
+    st.write("DEBUG KURS:", last_kurs)
+    last_bi = (float(use_data["BI Rate"].iloc[-1]) if "BI Rate" in use_data.columns
     else 5.25)
 
-    last_oil = (
-        float(use_data["Harga Minyak Dunia"].iloc[-1])
-        if "Harga Minyak Dunia" in use_data.columns
-        else 75.0
-    )
+    if pd.isna(last_bi):
+        last_bi = 5.25
 
-    last_kurs = (
-        float(use_data["Kurs USD/IDR"].iloc[-1])
-        if "Kurs USD/IDR" in use_data.columns
-        else 15500.0
-    )
+    last_bi = max(0.0, min(last_bi, 25.0))
+    last_oil   = float(use_data["Harga Minyak Dunia"].iloc[-1])                  if "Harga Minyak Dunia" in use_data.columns else 75.0
+    last_kurs  = float(use_data["Kurs USD/IDR"].iloc[-1])                  if "Kurs USD/IDR" in use_data.columns else 15500.0
 
     exog_inputs = {}
     header_cols = st.columns([1.6, 1, 1, 1])
