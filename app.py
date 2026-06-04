@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 
 # ── Page Config ───────────────────────────────────────────────────
 st.set_page_config(
-    page_title="INFLASI.N-BEATSx — Prediksi Inflasi Indonesia",
+    page_title="INFLASI.AI — Prediksi Inflasi Indonesia",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -266,7 +266,7 @@ with st.sidebar:
     <div style='padding:1rem 0 0.5rem'>
         <div style='font-family:Space Mono,monospace;font-size:1.1rem;
                     font-weight:700;color:#63B3ED;letter-spacing:1px;'>
-            INFLASI.N-BEATSx
+            INFLASI.AI
         </div>
         <div style='font-size:0.72rem;color:#4A5568;margin-top:2px;'>
             N-BEATSx + Bayesian Optimization
@@ -355,99 +355,103 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════
 def page_home():
     # ── Hero Section ──────────────────────────────────────────────
-    st.markdown("""
-    <div style='background:linear-gradient(135deg,#0d1117 0%,#1a1f2e 60%,#0d1117 100%);
-                border:1px solid #2D3748;border-radius:20px;
-                padding:3rem 3rem 2.5rem;margin-bottom:1.5rem;position:relative;
-                overflow:hidden;'>
-        <div style='position:absolute;top:-60px;right:-60px;width:320px;height:320px;
-                    background:radial-gradient(circle,rgba(99,179,237,0.07) 0%,transparent 70%);
-                    pointer-events:none;'></div>
-        <div style='position:absolute;bottom:-80px;left:10%;width:280px;height:280px;
-                    background:radial-gradient(circle,rgba(104,211,145,0.05) 0%,transparent 70%);
-                    pointer-events:none;'></div>
-
-        <div style='display:flex;align-items:center;gap:1rem;margin-bottom:1rem;'>
-            <div style='font-size:2.8rem;'>📈</div>
-            <div>
-                <div style='font-family:Space Mono,monospace;font-size:2rem;
-                            font-weight:700;color:#63B3ED;letter-spacing:-0.5px;
-                            line-height:1.1;'>INFLASI.N-BEATSx</div>
-                <div style='font-size:0.85rem;color:#4A5568;margin-top:4px;
-                            font-weight:400;letter-spacing:0.05em;'>
-                    SISTEM PREDIKSI INFLASI INDONESIA
+    st.markdown(
+        """
+        <div style="background:linear-gradient(135deg,#0d1117 0%,#1a1f2e 60%,#0d1117 100%);
+                    border:1px solid #2D3748;border-radius:20px;
+                    padding:3rem 3rem 2.5rem;margin-bottom:1.5rem;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:-60px;right:-60px;width:320px;height:320px;
+                        background:radial-gradient(circle,rgba(99,179,237,0.07) 0%,transparent 70%);"></div>
+            <div style="position:absolute;bottom:-80px;left:10%;width:280px;height:280px;
+                        background:radial-gradient(circle,rgba(104,211,145,0.05) 0%,transparent 70%);"></div>
+            <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+                <div style="font-size:2.8rem;">📈</div>
+                <div>
+                    <div style="font-family:Space Mono,monospace;font-size:2rem;
+                                font-weight:700;color:#63B3ED;letter-spacing:-0.5px;line-height:1.1;">
+                        INFLASI.N-BEATSx
+                    </div>
+                    <div style="font-size:0.85rem;color:#4A5568;margin-top:4px;
+                                font-weight:400;letter-spacing:0.05em;">
+                        SISTEM PREDIKSI INFLASI INDONESIA
+                    </div>
                 </div>
             </div>
+            <div style="font-size:1rem;color:#A0AEC0;line-height:1.8;max-width:680px;margin-bottom:2rem;">
+                Sistem prediksi inflasi berbasis model
+                <b style="color:#63B3ED;">N-BEATSx</b>
+                yang dioptimasi dengan
+                <b style="color:#68D391;">Bayesian Optimization</b>
+                dua tahap. Model mengintegrasikan variabel makroekonomi — BI Rate,
+                kurs USD/IDR, dan harga minyak dunia — serta efek kalender hari besar
+                keagamaan untuk menghasilkan prediksi inflasi Indonesia hingga
+                <b style="color:#F6AD55;">6 bulan ke depan</b>.
+            </div>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                <span style="background:#1A365D;color:#63B3ED;padding:5px 14px;
+                             border-radius:20px;font-size:0.78rem;font-weight:600;">
+                    N-BEATSx · Deep Learning
+                </span>
+                <span style="background:#1C4532;color:#68D391;padding:5px 14px;
+                             border-radius:20px;font-size:0.78rem;font-weight:600;">
+                    Bayesian Optimization · Optuna
+                </span>
+                <span style="background:#3D2800;color:#F6AD55;padding:5px 14px;
+                             border-radius:20px;font-size:0.78rem;font-weight:600;">
+                    Efek Kalender · Variabel Eksogen
+                </span>
+                <span style="background:#322659;color:#B794F4;padding:5px 14px;
+                             border-radius:20px;font-size:0.78rem;font-weight:600;">
+                    Jan 2010 – Sep 2025 · 189 Observasi
+                </span>
+            </div>
         </div>
-
-        <div style='font-size:1rem;color:#A0AEC0;line-height:1.8;
-                    max-width:680px;margin-bottom:2rem;'>
-            Sistem prediksi inflasi berbasis model <b style="color:#63B3ED;">N-BEATSx</b>
-            yang dioptimasi dengan <b style="color:#68D391;">Bayesian Optimization</b>
-            dua tahap. Model mengintegrasikan variabel makroekonomi — BI Rate,
-            kurs USD/IDR, dan harga minyak dunia — serta efek kalender hari besar
-            keagamaan untuk menghasilkan prediksi inflasi Indonesia
-            hingga <b style="color:#F6AD55;">6 bulan ke depan</b>.
-        </div>
-
-        <div style='display:flex;gap:0.6rem;flex-wrap:wrap;'>
-            <span style='background:#1A365D;color:#63B3ED;padding:5px 14px;
-                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
-                N-BEATSx · Deep Learning
-            </span>
-            <span style='background:#1C4532;color:#68D391;padding:5px 14px;
-                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
-                Bayesian Optimization · Optuna
-            </span>
-            <span style='background:#3D2800;color:#F6AD55;padding:5px 14px;
-                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
-                Efek Kalender · Variabel Eksogen
-            </span>
-            <span style='background:#322659;color:#B794F4;padding:5px 14px;
-                         border-radius:20px;font-size:0.78rem;font-weight:600;'>
-                Jan 2010 – Sep 2025 · 189 Observasi
-            </span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
 
     # ── KPI Row ───────────────────────────────────────────────────
-    st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
-                unsafe_allow_html=True)
-
+    st.markdown(
+        "<div class='section-header'>Performa Model pada Data Uji</div>",
+        unsafe_allow_html=True
+    )
     k1, k2, k3, k4, k5 = st.columns(5)
     kpis = [
-        ("MAE",     "0.00601", "Mean Absolute Error",      "#63B3ED"),
-        ("RMSE",    "0.00834", "Root Mean Squared Error",  "#63B3ED"),
-        ("SMAPE",   "41.76%",  "Symmetric MAPE",           "#F6AD55"),
-        ("Horizon", "6 Bulan", "Prediksi ke depan",        "#68D391"),
-        ("Obs.",    "189",     "Data pelatihan bulanan",   "#B794F4"),
+        ("MAE",     "0.00601", "Mean Absolute Error",     "#63B3ED"),
+        ("RMSE",    "0.00834", "Root Mean Squared Error", "#63B3ED"),
+        ("SMAPE",   "41.76%",  "Symmetric MAPE",          "#F6AD55"),
+        ("Horizon", "6 Bulan", "Prediksi ke depan",       "#68D391"),
+        ("Obs.",    "189",     "Data bulanan",             "#B794F4"),
     ]
     for col, (label, val, sub, color) in zip([k1, k2, k3, k4, k5], kpis):
         with col:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-label'>{label}</div>
-                <div class='metric-value' style='color:{color};font-size:1.35rem;'>
-                    {val}
-                </div>
-                <div class='metric-sub'>{sub}</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style='font-size:0.75rem;color:#4A5568;margin-top:6px;margin-bottom:1.5rem;'>
-        * SMAPE dipengaruhi anomali deflasi Februari 2025 (−0.09%).
-        Pada bulan normal, SMAPE model berkisar 6–25%.
-    </div>""", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">{label}</div>
+                    <div class="metric-value" style="color:{color};font-size:1.35rem;">{val}</div>
+                    <div class="metric-sub">{sub}</div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+    st.markdown(
+        """<div style="font-size:0.75rem;color:#4A5568;margin-top:6px;margin-bottom:1.5rem;">
+            * SMAPE dipengaruhi anomali deflasi Februari 2025 (−0.09%).
+            Pada bulan normal SMAPE berkisar 6–25%.
+        </div>""",
+        unsafe_allow_html=True
+    )
 
     # ── Perbandingan Model & Variabel ─────────────────────────────
     col_cmp, col_var = st.columns(2)
 
     with col_cmp:
-        st.markdown("<div class='section-header'>Perbandingan Model</div>",
-                    unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-header'>Perbandingan Model</div>",
+            unsafe_allow_html=True
+        )
         comp = [
-            ("N-BEATSx + BO",   "0.00601", "0.00834", "41.76%", True),
+            ("N-BEATSx + BO ★", "0.00601", "0.00834", "41.76%", True),
             ("Prophet",          "0.00487", "0.00592", "43.96%", False),
             ("SARIMAX",          "0.00717", "0.00905", "46.40%", False),
             ("N-BEATSx Default", "0.00530", "0.00726", "40.72%", False),
@@ -458,89 +462,91 @@ def page_home():
             if is_ours:
                 std = "color:#63B3ED;font-weight:700;"
                 sbg = "background:#0d1a2e;"
-                star = " ★"
             else:
                 std = "color:#A0AEC0;"
                 sbg = ""
-                star = ""
-            rows_comp += f"""
-            <tr style='{sbg}'>
-                <td style='{std}'>{model}{star}</td>
-                <td style='{std}'>{mae}</td>
-                <td style='{std}'>{rmse}</td>
-                <td style='{std}'>{smape}</td>
-            </tr>"""
-        st.markdown(f"""
-        <table class='pred-table'>
-            <tr><th>Model</th><th>MAE ↓</th><th>RMSE ↓</th><th>SMAPE ↓</th></tr>
-            {rows_comp}
-        </table>
-        <div style='font-size:0.73rem;color:#4A5568;margin-top:6px;'>
-            ↓ = semakin kecil semakin baik &nbsp;·&nbsp; ★ = model yang dikembangkan
-        </div>""", unsafe_allow_html=True)
+            rows_comp += (
+                f"<tr style=\"{sbg}\">"
+                f"<td style=\"{std}\">{model}</td>"
+                f"<td style=\"{std}\">{mae}</td>"
+                f"<td style=\"{std}\">{rmse}</td>"
+                f"<td style=\"{std}\">{smape}</td>"
+                f"</tr>"
+            )
+        st.markdown(
+            f"""
+            <table class="pred-table">
+                <tr><th>Model</th><th>MAE ↓</th><th>RMSE ↓</th><th>SMAPE ↓</th></tr>
+                {rows_comp}
+            </table>
+            <div style="font-size:0.73rem;color:#4A5568;margin-top:6px;">
+                ↓ = semakin kecil semakin baik &nbsp;·&nbsp; ★ = model yang dikembangkan
+            </div>""",
+            unsafe_allow_html=True
+        )
 
     with col_var:
-        st.markdown("<div class='section-header'>Variabel yang Digunakan</div>",
-                    unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-header'>Variabel yang Digunakan</div>",
+            unsafe_allow_html=True
+        )
         var_groups = [
-            ("🎯  Target",
-             [("Inflasi Bulanan (y)", "")],
-             "#63B3ED", "#1A365D"),
-            ("📉  Lag Inflasi",
-             [("lag1",""),("lag3",""),("lag6",""),("lag12","")],
-             "#68D391", "#1C4532"),
-            ("🌐  Eksogen Historis",
-             [("BI Rate",""),("Harga Minyak Dunia",""),("Kurs USD/IDR","")],
-             "#F6AD55", "#3D2800"),
-            ("📅  Dummy Kalender",
-             [("Ramadan",""),("Idulfitri",""),("Natal",""),("Imlek","")],
-             "#B794F4", "#322659"),
+            ("🎯 Target",          [("Inflasi Bulanan (y)",)], "#63B3ED", "#1A365D"),
+            ("📉 Lag Inflasi",     [("lag1",),("lag3",),("lag6",),("lag12",)], "#68D391","#1C4532"),
+            ("🌐 Eksogen Historis",[("BI Rate",),("Harga Minyak Dunia",),("Kurs USD/IDR",)],"#F6AD55","#3D2800"),
+            ("📅 Dummy Kalender",  [("Ramadan",),("Idulfitri",),("Natal",),("Imlek",)], "#B794F4","#322659"),
         ]
         for group, items, color, bg in var_groups:
             badges = " ".join([
-                f"<span style='background:{bg};color:{color};padding:3px 10px;"
-                f"border-radius:12px;font-size:0.75rem;font-weight:600;"
-                f"display:inline-block;margin:2px;'>{name}</span>"
-                for name, _ in items
+                f'<span style="background:{bg};color:{color};padding:3px 10px;'
+                f'border-radius:12px;font-size:0.75rem;font-weight:600;'
+                f'display:inline-block;margin:2px;">{item[0]}</span>'
+                for item in items
             ])
-            st.markdown(f"""
-            <div style='margin-bottom:0.8rem;'>
-                <div style='font-size:0.73rem;color:#4A5568;font-weight:600;
-                            text-transform:uppercase;letter-spacing:0.08em;
-                            margin-bottom:5px;'>{group}</div>
-                {badges}
-            </div>""", unsafe_allow_html=True)
+            st.markdown(
+                f"""<div style="margin-bottom:0.8rem;">
+                    <div style="font-size:0.73rem;color:#4A5568;font-weight:600;
+                                text-transform:uppercase;letter-spacing:0.08em;
+                                margin-bottom:5px;">{group}</div>
+                    {badges}
+                </div>""",
+                unsafe_allow_html=True
+            )
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='section-header'>Uji Asumsi Residual</div>",
-                    unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-header'>Uji Asumsi Residual</div>",
+            unsafe_allow_html=True
+        )
         residuals = [
-            ("Rata-rata Residual",      "ē = −0.004927", "p > 0.05", "✅"),
-            ("Normalitas (Shapiro-Wilk)","W=0.9152",     "p=0.2489", "✅"),
-            ("Autokorelasi (Ljung-Box)","Q=5.2282",      "p=0.5149", "✅"),
-            ("Homoskedastisitas (BP)",  "LM=8.8344",     "p=0.2648", "✅"),
+            ("Rata-rata Residual",       "ē = −0.004927", "Tidak bias sistematis"),
+            ("Normalitas (Shapiro-Wilk)","W=0.9152",      "p=0.2489 · Normal"),
+            ("Autokorelasi (Ljung-Box)", "Q=5.2282",      "p=0.5149 · Tidak autokor."),
+            ("Homoskedastisitas (BP)",   "LM=8.8344",     "p=0.2648 · Homoskedastis"),
         ]
-        for test, stat, pval, icon in residuals:
-            st.markdown(f"""
-            <div style='background:#1A202C;border:1px solid #2D3748;
-                        border-radius:8px;padding:0.55rem 0.9rem;
-                        margin-bottom:0.45rem;display:flex;
-                        gap:0.6rem;align-items:center;'>
-                <div style='font-size:0.95rem;'>{icon}</div>
-                <div style='flex:1;'>
-                    <div style='font-size:0.77rem;font-weight:600;
-                                color:#E8EAF0;'>{test}</div>
-                    <div style='font-family:Space Mono,monospace;
-                                font-size:0.7rem;color:#63B3ED;'>{stat} &nbsp;·&nbsp; {pval}</div>
-                </div>
-            </div>""", unsafe_allow_html=True)
+        for test, stat, desc in residuals:
+            st.markdown(
+                f"""<div style="background:#1A202C;border:1px solid #2D3748;
+                            border-radius:8px;padding:0.55rem 0.9rem;
+                            margin-bottom:0.45rem;display:flex;gap:0.6rem;align-items:center;">
+                    <div style="font-size:0.95rem;">✅</div>
+                    <div style="flex:1;">
+                        <div style="font-size:0.77rem;font-weight:600;color:#E8EAF0;">{test}</div>
+                        <div style="font-family:Space Mono,monospace;font-size:0.7rem;color:#63B3ED;">
+                            {stat} &nbsp;·&nbsp; {desc}
+                        </div>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Alur Penggunaan ───────────────────────────────────────────
-    st.markdown("<div class='section-header'>Alur Penggunaan Sistem</div>",
-                unsafe_allow_html=True)
-
+    st.markdown(
+        "<div class='section-header'>Alur Penggunaan Sistem</div>",
+        unsafe_allow_html=True
+    )
     sc1, sc2, sc3 = st.columns(3)
     steps = [
         ("01", "📂", "Upload Data",
@@ -555,44 +561,49 @@ def page_home():
     ]
     for col, (num, icon, title, desc, nav_key) in zip([sc1, sc2, sc3], steps):
         with col:
-            st.markdown(f"""
-            <div class='feature-card' style='position:relative;'>
-                <div style='position:absolute;top:1rem;right:1rem;
-                            font-family:Space Mono,monospace;
-                            font-size:0.7rem;color:#2D3748;font-weight:700;'>
-                    {num}
-                </div>
-                <div style='font-size:2rem;margin-bottom:0.5rem;'>{icon}</div>
-                <div class='feature-title'>{title}</div>
-                <div class='feature-desc'>{desc}</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(
+                f"""<div class="feature-card" style="position:relative;">
+                    <div style="position:absolute;top:1rem;right:1rem;
+                                font-family:Space Mono,monospace;
+                                font-size:0.7rem;color:#2D3748;font-weight:700;">{num}</div>
+                    <div style="font-size:2rem;margin-bottom:0.5rem;">{icon}</div>
+                    <div class="feature-title">{title}</div>
+                    <div class="feature-desc">{desc}</div>
+                </div>""",
+                unsafe_allow_html=True
+            )
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button(f"Buka {title} →", key=f"home_nav_{num}",
-                         use_container_width=True):
+            if st.button(
+                f"Buka {title} →",
+                key=f"home_nav_{num}",
+                use_container_width=True
+            ):
                 st.session_state.page = nav_key
                 st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Footer Note ───────────────────────────────────────────────
-    st.markdown("""
-    <div style='background:#1A202C;border:1px solid #2D3748;border-radius:12px;
-                padding:1.2rem 1.5rem;display:flex;gap:1rem;align-items:flex-start;'>
-        <div style='font-size:1.3rem;'>ℹ️</div>
-        <div>
-            <div style='font-size:0.85rem;font-weight:600;color:#E8EAF0;
-                        margin-bottom:4px;'>Cara Mulai</div>
-            <div style='font-size:0.82rem;color:#718096;line-height:1.7;'>
-                Klik <b style="color:#63B3ED;">Upload Data</b> di sidebar kiri
-                untuk mengunggah data historis terbaru, lalu buka halaman
-                <b style="color:#63B3ED;">Prediksi Inflasi</b> untuk melihat
-                proyeksi 6 bulan ke depan. Jika tidak ada data yang diunggah,
-                sistem akan menggunakan data bawaan model (Jan 2010 – Sep 2025)
-                secara otomatis.
+    # ── Footer ────────────────────────────────────────────────────
+    st.markdown(
+        """<div style="background:#1A202C;border:1px solid #2D3748;border-radius:12px;
+                    padding:1.2rem 1.5rem;display:flex;gap:1rem;align-items:flex-start;">
+            <div style="font-size:1.3rem;">ℹ️</div>
+            <div>
+                <div style="font-size:0.85rem;font-weight:600;color:#E8EAF0;margin-bottom:4px;">
+                    Cara Mulai
+                </div>
+                <div style="font-size:0.82rem;color:#718096;line-height:1.7;">
+                    Klik <b style="color:#63B3ED;">Upload Data</b> di sidebar kiri
+                    untuk mengunggah data historis terbaru, lalu buka halaman
+                    <b style="color:#63B3ED;">Prediksi Inflasi</b> untuk melihat
+                    proyeksi 6 bulan ke depan. Jika tidak ada data yang diunggah,
+                    sistem menggunakan data bawaan model (Jan 2010 – Sep 2025) secara otomatis.
+                </div>
             </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        </div>""",
+        unsafe_allow_html=True
+    )
+
 
 
 def page_upload():
