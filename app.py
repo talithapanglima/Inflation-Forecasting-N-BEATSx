@@ -180,13 +180,35 @@ st.markdown("""
 @st.cache_resource(show_spinner=False)
 def load_artifacts():
     from neuralforecast import NeuralForecast
+    import torch
+    # Patch torch.load untuk kompatibilitas
+    _orig = torch.load
+    def _patched(*a, **kw):
+        kw.setdefault('weights_only', False)
+        return _orig(*a, **kw)
+    torch.load = _patched
+
     nf          = NeuralForecast.load('saved_model/nf_final')
     with open('saved_model/scaler_y.pkl',    'rb') as f: scaler_y    = pickle.load(f)
     with open('saved_model/scaler_exog.pkl', 'rb') as f: scaler_exog = pickle.load(f)
     with open('saved_model/best_params.pkl', 'rb') as f: best        = pickle.load(f)
     with open('saved_model/config.json',     'r')  as f: config      = json.load(f)
-    full_data   = pd.read_parquet('saved_model/full_data.parquet')
-    return nf, scaler_y, scaler_exog, best, config, full_data
+
+    # full_data adalah data yang SUDAH di-scale (normalized)
+    # digunakan langsung sebagai input model tanpa di-scale lagi
+    full_data_scaled = pd.read_parquet('saved_model/full_data.parquet')
+
+    # Buat juga versi raw (inverse transform) untuk keperluan UI
+    # agar default nilai eksogen tampil dalam skala asli
+    NUM_COLS = ['Harga Minyak Dunia', 'BI Rate', 'Kurs USD/IDR',
+                'lag1', 'lag3', 'lag6', 'lag12']
+    full_data_raw = full_data_scaled.copy()
+    full_data_raw['y'] = scaler_y.inverse_transform(
+        full_data_scaled[['y']]).flatten()
+    full_data_raw[NUM_COLS] = scaler_exog.inverse_transform(
+        full_data_scaled[NUM_COLS])
+
+    return nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw
 
 
 # ── Helper Functions ──────────────────────────────────────────────
@@ -740,50 +762,58 @@ def page_upload():
     )
 
     try:
-        nf, scaler_y, scaler_exog, best, config, full_data = load_artifacts()
+        nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
 
-    use_data = st.session_state.uploaded_df                if st.session_state.uploaded_df is not None else full_data
-    last_date = pd.to_datetime(use_data["ds"].max())
+    # use_data_raw = data dalam skala ASLI (untuk UI, default input, dll)
+    # use_data_scaled = data dalam skala NORMALIZED (untuk input model)
+    if st.session_state.uploaded_df is not None:
+        use_data_raw    = st.session_state.uploaded_df   # data upload = raw
+        _is_default     = False
+    else:
+        use_data_raw    = full_data_raw                  # data bawaan = inverse-transformed
+        _is_default     = True
+
+    last_date = pd.to_datetime(use_data_raw["ds"].max())
     future_dates = pd.date_range(
         start=last_date + pd.DateOffset(months=1), periods=6, freq="MS"
     )
 
     # ── Input eksogen per bulan ───────────────────────────────────
     st.markdown("**Variabel Makroekonomi per Bulan Prediksi**")
-   
+
+    # Ambil nilai default dari raw data (skala asli)
     last_bi = (
-    float(use_data["BI Rate"].iloc[-1])
-    if "BI Rate" in use_data.columns
-    else 5.25)
+        float(use_data_raw["BI Rate"].iloc[-1])
+        if "BI Rate" in use_data_raw.columns
+        else 5.25)
 
     last_oil = (
-        float(use_data["Harga Minyak Dunia"].iloc[-1])
-        if "Harga Minyak Dunia" in use_data.columns
+        float(use_data_raw["Harga Minyak Dunia"].iloc[-1])
+        if "Harga Minyak Dunia" in use_data_raw.columns
         else 75.0
     )
 
     last_kurs = (
-        float(use_data["Kurs USD/IDR"].iloc[-1])
-        if "Kurs USD/IDR" in use_data.columns
+        float(use_data_raw["Kurs USD/IDR"].iloc[-1])
+        if "Kurs USD/IDR" in use_data_raw.columns
         else 15500.0
     )
 
     # Bersihkan NaN
-    if pd.isna(last_bi):
-        last_bi = 5.25
+    if pd.isna(last_bi):   last_bi   = 5.25
+    if pd.isna(last_oil):  last_oil  = 75.0
+    if pd.isna(last_kurs): last_kurs = 15500.0
 
-    if pd.isna(last_oil):
-        last_oil = 75.0
-
-    if pd.isna(last_kurs):
-        last_kurs = 15500.0
+    # Konversi BI Rate ke persen jika masih desimal (untuk tampilan input)
+    if last_bi < 1.0:
+        last_bi = last_bi * 100.0
 
     # Pastikan masuk range number_input
-    last_bi = max(0.0, min(last_bi, 25.0))
-    last_oil = max(0.0, min(last_oil, 500.0))
+    last_bi   = max(0.0, min(last_bi,   25.0))
+    last_oil  = max(0.0, min(last_oil,  500.0))
     last_kurs = max(0.0, min(last_kurs, 99999.0))
 
     exog_inputs = {}
@@ -876,43 +906,43 @@ def page_upload():
     if run_pred:
         with st.spinner("Menjalankan prediksi…"):
             try:
-                df_feat = build_features(
-                    use_data[["ds","y","BI Rate",
-                              "Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
-                    config
-                )
-                num_cols  = config["num_cols"]
-                df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
+                # ── Build df_scaled untuk input model ──────────────
+                # PENTING:
+                # - Data upload (raw) → perlu build_features + scale_df
+                # - Data bawaan (full_data_scaled) → sudah ter-scale, pakai langsung
+                if not _is_default:
+                    # Data dari user upload: raw → build features → scale
+                    df_feat = build_features(
+                        use_data_raw[["ds","y","BI Rate",
+                                      "Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
+                        config
+                    )
+                    num_cols  = config["num_cols"]
+                    df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
+                else:
+                    # Data bawaan: full_data_scaled sudah siap pakai model
+                    df_scaled = full_data_scaled.copy()
+                    df_feat   = full_data_raw.copy()  # untuk grafik hist_y
 
                 # Build future df dari input user
-                # Deteksi format BI Rate di data historis (desimal atau %)
-                _bi_sample = float(use_data["BI Rate"].iloc[-1]) \
-                             if "BI Rate" in use_data.columns else 6.0
-                _bi_is_pct = _bi_sample > 1.0  # True jika data asli dalam %
-
+                # Input BI Rate dari number_input SELALU dalam persen (%) → konversi ke desimal
                 fut_rows = []
 
                 for i, fdate in enumerate(future_dates):
-
-                    bi_val = exog_inputs[i]["BI Rate"]
-
-                    if not _bi_is_pct:
-                        bi_val = bi_val / 100.0
+                    # BI Rate dari UI selalu dalam %, konversi ke desimal
+                    bi_val = exog_inputs[i]["BI Rate"] / 100.0
 
                     row = {
                         "unique_id": "inflasi",
                         "ds": fdate,
-
                         "BI Rate": bi_val,
                         "Harga Minyak Dunia": exog_inputs[i]["Harga Minyak Dunia"],
                         "Kurs USD/IDR": exog_inputs[i]["Kurs USD/IDR"],
-
-                        "Ramadhan": dummy_inputs[i]["Ramadhan"],
+                        "Ramadhan":  dummy_inputs[i]["Ramadhan"],
                         "Idulfitri": dummy_inputs[i]["Idulfitri"],
-                        "Natal": dummy_inputs[i]["Natal"],
-                        "Imlek": dummy_inputs[i]["Imlek"],
+                        "Natal":     dummy_inputs[i]["Natal"],
+                        "Imlek":     dummy_inputs[i]["Imlek"],
                     }
-
                     fut_rows.append(row)
 
                 fut_df = pd.DataFrame(fut_rows)
@@ -972,9 +1002,9 @@ def page_upload():
                 import matplotlib.pyplot as plt
                 import matplotlib.dates as mdates
                 set_dark_style()
-                hist_y  = scaler_y.inverse_transform(
-                    df_scaled[["y"]]).flatten()[-24:]
-                hist_ds = df_feat["ds"].values[-24:]
+                # Gunakan df_feat (raw) untuk hist_y agar nilai benar di grafik
+                hist_y  = df_feat["y"].values[-24:]
+                hist_ds = pd.to_datetime(df_feat["ds"].values[-24:])
 
                 fig, ax = plt.subplots(figsize=(9, 4))
                 ax.plot(hist_ds, hist_y * 100,
@@ -1109,14 +1139,14 @@ def page_visualisasi():
     """, unsafe_allow_html=True)
 
     try:
-        _, scaler_y, scaler_exog, _, config, full_data = load_artifacts()
+        _, scaler_y, scaler_exog, _, config, full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
 
     use_data = st.session_state.uploaded_df \
                if st.session_state.uploaded_df is not None \
-               else full_data
+               else full_data_raw   # gunakan raw (skala asli) untuk visualisasi
     data_src = "Upload" if st.session_state.uploaded_df is not None \
                else "Data Bawaan Model"
 
@@ -1235,39 +1265,47 @@ def page_prediksi():
     """, unsafe_allow_html=True)
 
     try:
-        nf, scaler_y, scaler_exog, best, config, full_data = load_artifacts()
+        nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
 
-    use_data   = st.session_state.uploaded_df \
-                 if st.session_state.uploaded_df is not None \
-                 else full_data
-    data_src   = "Upload" if st.session_state.uploaded_df is not None \
-                 else "Data Bawaan Model"
+    _is_default_pred = st.session_state.uploaded_df is None
+    use_data_raw_pred = (st.session_state.uploaded_df
+                         if not _is_default_pred
+                         else full_data_raw)
+    data_src   = "Upload" if not _is_default_pred else "Data Bawaan Model"
 
     st.markdown(f"""
     <div class='info-box'>
         📌 Sumber data: <b>{data_src}</b> ·
-        {len(use_data)} observasi
+        {len(use_data_raw_pred)} observasi
     </div>""", unsafe_allow_html=True)
 
     try:
-        df_feat = build_features(
-            use_data[['ds', 'y', 'BI Rate',
-                      'Harga Minyak Dunia', 'Kurs USD/IDR']].copy(),
-            config)
-        num_cols  = config['num_cols']
-        df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
-        last_date = df_feat['ds'].max()
+        if not _is_default_pred:
+            # Upload: build features dari raw lalu scale
+            df_feat = build_features(
+                use_data_raw_pred[['ds', 'y', 'BI Rate',
+                                   'Harga Minyak Dunia', 'Kurs USD/IDR']].copy(),
+                config)
+            num_cols  = config['num_cols']
+            df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
+        else:
+            # Bawaan: full_data_scaled sudah siap
+            df_scaled = full_data_scaled.copy()
+            df_feat   = full_data_raw.copy()
+
+        last_date = pd.to_datetime(df_feat['ds'].max())
         fut_dummy = make_future_dummy(last_date, config['h'], config)
 
         forecast    = nf.predict(df=df_scaled, futr_df=fut_dummy)
         pred_vals   = scaler_y.inverse_transform(
             forecast[['NBEATSx']]).flatten()
         future_dates = forecast['ds'].values
-        hist_y  = scaler_y.inverse_transform(df_scaled[['y']]).flatten()
-        hist_ds = df_feat['ds'].values
+        # hist_y dari raw data (sudah dalam skala asli)
+        hist_y  = df_feat['y'].values
+        hist_ds = pd.to_datetime(df_feat['ds'].values)
         data_ok = True
     except Exception as e:
         st.error(f"❌ Error prediksi: {e}")
