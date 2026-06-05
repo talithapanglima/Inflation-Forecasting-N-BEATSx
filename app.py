@@ -625,7 +625,7 @@ def page_upload():
         <div class="info-box">
             <b>Format:</b> CSV (.csv) atau Excel (.xlsx) &nbsp;·&nbsp;
             <b>Maks:</b> 200 MB &nbsp;·&nbsp;
-            <b>Frekuensi:</b> Bulanan (min. 13 baris)
+            <b>Frekuensi:</b> Bulanan (min. 36 baris / 3 tahun)
         </div>
         """,
         unsafe_allow_html=True
@@ -672,22 +672,52 @@ def page_upload():
                 ["ds","y","BI Rate","Harga Minyak Dunia","Kurs USD/IDR"]
                 if c in df_show.columns]
             st.dataframe(
-                df_show[show_cols].tail(8).style.format({
+                df_show[show_cols].head(5).style.format({
                     "y": "{:.4f}", "BI Rate": "{:.4f}",
                     "Harga Minyak Dunia": "{:.2f}", "Kurs USD/IDR": "{:.0f}",
                 }),
-                use_container_width=True, height=260
+                use_container_width=True, height=220
             )
-            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-            with col_s1:
-                st.metric("Total Baris", len(df_show))
-            with col_s2:
-                st.metric("Periode Awal", df_show["ds"].min().strftime("%b %Y"))
-            with col_s3:
-                st.metric("Periode Akhir", df_show["ds"].max().strftime("%b %Y"))
-            with col_s4:
-                st.metric("Inflasi Terakhir",
-                          f"{df_show['y'].iloc[-1]*100:.2f}%")
+            _total  = len(df_show)
+            _tgl_a  = df_show["ds"].min().strftime("%B %Y")
+            _tgl_z  = df_show["ds"].max().strftime("%B %Y")
+            _inf    = f"{df_show['y'].iloc[-1]*100:.2f}%"
+            st.markdown(
+                f"""
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);
+                            gap:10px;margin-top:0.75rem;">
+                    <div style="background:#1A202C;border:1px solid #2D3748;
+                                border-radius:10px;padding:0.85rem 1rem;">
+                        <div style="font-size:0.7rem;color:#718096;text-transform:uppercase;
+                                    letter-spacing:0.07em;margin-bottom:4px;">Total Baris</div>
+                        <div style="font-family:Space Mono,monospace;font-size:1.25rem;
+                                    font-weight:700;color:#63B3ED;">{_total}</div>
+                    </div>
+                    <div style="background:#1A202C;border:1px solid #2D3748;
+                                border-radius:10px;padding:0.85rem 1rem;">
+                        <div style="font-size:0.7rem;color:#718096;text-transform:uppercase;
+                                    letter-spacing:0.07em;margin-bottom:4px;">Periode Awal</div>
+                        <div style="font-family:Space Mono,monospace;font-size:1rem;
+                                    font-weight:700;color:#63B3ED;line-height:1.3;">{_tgl_a}</div>
+                    </div>
+                    <div style="background:#1A202C;border:1px solid #2D3748;
+                                border-radius:10px;padding:0.85rem 1rem;">
+                        <div style="font-size:0.7rem;color:#718096;text-transform:uppercase;
+                                    letter-spacing:0.07em;margin-bottom:4px;">Periode Akhir</div>
+                        <div style="font-family:Space Mono,monospace;font-size:1rem;
+                                    font-weight:700;color:#63B3ED;line-height:1.3;">{_tgl_z}</div>
+                    </div>
+                    <div style="background:#1A202C;border:1px solid #2D3748;
+                                border-radius:10px;padding:0.85rem 1rem;">
+                        <div style="font-size:0.7rem;color:#718096;text-transform:uppercase;
+                                    letter-spacing:0.07em;margin-bottom:4px;">Inflasi Terakhir</div>
+                        <div style="font-family:Space Mono,monospace;font-size:1.25rem;
+                                    font-weight:700;color:#68D391;">{_inf}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
             if st.button("🗑️  Hapus & gunakan data bawaan",
                          use_container_width=True):
                 st.session_state.uploaded_df   = None
@@ -1558,7 +1588,7 @@ def page_prediksi():
             • <code>BI Rate</code> — Suku bunga kebijakan (desimal)<br>
             • <code>Harga Minyak Dunia</code> — USD per barel<br>
             • <code>Kurs USD/IDR</code> — Nilai tukar rupiah<br><br>
-            <b>Frekuensi:</b> Bulanan · <b>Minimum:</b> 13 baris
+            <b>Frekuensi:</b> Bulanan · <b>Minimum:</b> 36 baris
         </div>
         <div class='warning-box' style='margin-top:1rem;'>
             <b>Catatan:</b> Prediksi bersifat indikatif berdasarkan pola
@@ -1703,7 +1733,7 @@ def page_about():
     st.markdown("<div class='section-header'>Teknologi yang Digunakan</div>",
                 unsafe_allow_html=True)
     techs = [
-        ('Python 3.11', 'badge-blue'),
+        ('Python 3.10', 'badge-blue'),
         ('PyTorch', 'badge-blue'),
         ('NeuralForecast', 'badge-blue'),
         ('Optuna', 'badge-green'),
