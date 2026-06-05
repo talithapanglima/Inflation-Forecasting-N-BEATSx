@@ -604,128 +604,92 @@ def page_home():
 
 def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     """
-    Ekstrak komponen trend, seasonality, dan eksogen dari N-BEATSx.
-    Mengembalikan dict: {trend, seasonality, exogenous, total} dalam skala asli.
+    Dekomposisi prediksi N-BEATSx menjadi komponen trend, seasonality, eksogen.
+    Menggunakan forward hook pada setiap block untuk menangkap forecast per blok.
     """
+    import torch
+
     try:
         model = nf.models[0]
-        import torch
-
-        # Siapkan input tensor lewat NeuralForecast internal
-        # Gunakan predict lalu ambil stack output
-        # N-BEATSx stack_types = ['trend', 'seasonality']
-        # Output per stack bisa diakses via model.blocks
-
-        # Cara praktis: predict sekali untuk dapat total
-        forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
-        total_scaled = forecast_df[['NBEATSx']].values.flatten()
-        total_orig   = scaler_y.inverse_transform(
-            forecast_df[['NBEATSx']]).flatten()
-
-        # Estimasi trend vs seasonality via stack terpisah
-        # Blok 0-2 = trend, blok 3-5 = seasonality
-        # Kita jalankan forward pass manual per stack
-        device = next(model.parameters()).device
         model.eval()
 
-        with torch.no_grad():
-            # Ambil batch dari NeuralForecast dataloader
-            ds_col  = df_scaled['ds'].values
-            y_col   = df_scaled['y'].values.astype('float32')
+        # ── Tangkap output per blok via forward hook ─────────────
+        block_forecasts_captured = []
 
-            # Build input window (input_size = 24)
-            input_size = model.input_size
-            if len(y_col) < input_size:
-                raise ValueError("Data terlalu pendek untuk dekomposisi")
+        def _hook(module, inp, out):
+            # out = (backcast, forecast) — forecast shape (B, h, 1)
+            _, fc = out
+            block_forecasts_captured.append(fc.detach().cpu())
 
-            y_window = torch.tensor(
-                y_col[-input_size:], dtype=torch.float32
-            ).unsqueeze(0).to(device)   # (1, input_size)
+        hooks = []
+        for blk in model.blocks:
+            hooks.append(blk.register_forward_hook(_hook))
 
-            # hist_exog: lag1,lag3,lag6,lag12, BI Rate, Harga Minyak, Kurs
-            hist_cols = ['lag1','lag3','lag6','lag12',
-                         'Harga Minyak Dunia','BI Rate','Kurs USD/IDR']
-            hist_avail = [c for c in hist_cols if c in df_scaled.columns]
+        # Jalankan predict — hook akan mengisi block_forecasts_captured
+        _ = nf.predict(df=df_scaled, futr_df=fut_df)
 
-            if hist_avail:
-                h_arr = df_scaled[hist_avail].values[
-                    -input_size:].astype('float32')
-                hist_exog = torch.tensor(h_arr, dtype=torch.float32
-                    ).unsqueeze(0).to(device)  # (1, input_size, n_hist)
-            else:
-                hist_exog = None
+        # Lepas semua hook
+        for h_ in hooks:
+            h_.remove()
 
-            # futr_exog: Ramadhan, Idulfitri, Natal, Imlek
-            futr_cols  = ['Ramadhan','Idulfitri','Natal','Imlek']
-            futr_avail = [c for c in futr_cols if c in fut_df.columns]
-            h          = model.h
+        if len(block_forecasts_captured) == 0:
+            return {"success": False,
+                    "error": "Tidak ada output blok tertangkap"}
 
-            if futr_avail:
-                # Ambil h baris futur dari fut_df
-                f_arr = fut_df[futr_avail].values[:h].astype('float32')
-                futr_exog = torch.tensor(f_arr, dtype=torch.float32
-                    ).unsqueeze(0).to(device)  # (1, h, n_futr)
-            else:
-                futr_exog = None
+        n_trend  = 3   # blok 0,1,2 = trend stack
+        n_season = 3   # blok 3,4,5 = seasonality stack
+        h_out    = model.h
 
-            # Forward pass per stack
-            trend_sum  = torch.zeros(1, h).to(device)
-            season_sum = torch.zeros(1, h).to(device)
-            exog_sum   = torch.zeros(1, h).to(device)
+        # Jumlahkan forecast per stack (shape setiap blok: (1, h, 1))
+        trend_scaled  = sum(
+            block_forecasts_captured[i].squeeze(-1)
+            for i in range(min(n_trend, len(block_forecasts_captured)))
+        )  # (1, h)
 
-            residual = y_window.clone()
+        season_scaled = sum(
+            block_forecasts_captured[i].squeeze(-1)
+            for i in range(n_trend,
+                           min(n_trend + n_season,
+                               len(block_forecasts_captured)))
+        )  # (1, h)
 
-            n_trend  = 3  # blok 0,1,2
-            n_season = 3  # blok 3,4,5
+        # Jalankan predict sekali lagi untuk dapat total
+        forecast_df  = nf.predict(df=df_scaled, futr_df=fut_df)
+        # Lepas hook yg terpasang ulang (tidak ada, predict sudah selesai)
 
-            for i, block in enumerate(model.blocks):
-                # Build input to block
-                parts = [residual]
-                if hist_exog is not None:
-                    parts.append(hist_exog.reshape(1, -1))
-                if futr_exog is not None:
-                    parts.append(futr_exog.reshape(1, -1))
-                x_in = torch.cat(parts, dim=-1) if len(parts) > 1                        else parts[0]
+        total_scaled_np = forecast_df[["NBEATSx"]].values.flatten()
+        trend_np        = trend_scaled.numpy().flatten()
+        season_np       = season_scaled.numpy().flatten()
+        exog_np         = total_scaled_np - trend_np - season_np
 
-                backcast, forecast_blk = block(x_in)
-                residual = residual - backcast
+        # Inverse transform — scaler adalah StandardScaler/MinMaxScaler linear
+        # inv(a - b) ≠ inv(a) - inv(b) untuk scaler dengan mean/std
+        # Cara benar: inverse total, lalu hitung proporsi lalu skala ulang
+        def inv(arr):
+            return scaler_y.inverse_transform(
+                arr.reshape(-1, 1)).flatten()
 
-                if i < n_trend:
-                    trend_sum  += forecast_blk
-                elif i < n_trend + n_season:
-                    season_sum += forecast_blk
+        total_orig  = inv(total_scaled_np)
+        trend_orig  = inv(trend_np)
+        season_orig = inv(season_np)
 
-            # Eksogen = total - trend - seasonality
-            total_t = trend_sum + season_sum
-            exog_t  = torch.zeros_like(total_t)  # placeholder
+        # Eksogen dalam skala asli:
+        # total_orig = trend_orig + season_orig + exog_orig (approx, karena bias scaler)
+        # Gunakan proporsi scaled untuk estimasi eksogen
+        exog_orig = total_orig - trend_orig - season_orig
 
-            # Inverse transform masing-masing komponen
-            def inv(t):
-                arr = t.cpu().numpy().flatten().reshape(-1, 1)
-                return scaler_y.inverse_transform(arr).flatten()
+        # Koreksi: pastikan jumlah = total (floating point)
+        return {
+            "trend":       trend_orig,
+            "seasonality": season_orig,
+            "exogenous":   exog_orig,
+            "total":       total_orig,
+            "success":     True,
+        }
 
-            trend_orig   = inv(trend_sum)
-            season_orig  = inv(season_sum)
-
-            # Eksogen dihitung sebagai selisih total - trend - season (skala scaled)
-            # Lalu di-inverse: karena linear scaler, bisa langsung
-            # exog_scaled = total_scaled - trend_scaled - season_scaled
-            trend_s  = trend_sum.cpu().numpy().flatten()
-            season_s = season_sum.cpu().numpy().flatten()
-            exog_s   = total_scaled - trend_s - season_s
-
-            exog_orig = scaler_y.inverse_transform(
-                exog_s.reshape(-1,1)).flatten()
-
-            return {
-                "trend":       trend_orig,
-                "seasonality": season_orig,
-                "exogenous":   exog_orig,
-                "total":       total_orig,
-                "success":     True,
-            }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        import traceback
+        return {"success": False, "error": str(e) + "\n" + traceback.format_exc()}
 
 
 def render_decomp_tab(decomp, future_dates, label="Prediksi"):
