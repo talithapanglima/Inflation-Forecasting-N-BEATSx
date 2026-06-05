@@ -604,8 +604,14 @@ def page_home():
 
 def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     """
-    Dekomposisi prediksi N-BEATSx menjadi komponen trend, seasonality, eksogen.
-    Menggunakan forward hook pada setiap block untuk menangkap forecast per blok.
+    Dekomposisi prediksi N-BEATSx menjadi komponen trend, seasonality,
+    dan eksogen menggunakan PyTorch forward hook pada setiap blok model.
+
+    Komponen eksogen dihitung sebagai residual dalam ruang scaled:
+        exog_scaled = total_scaled - trend_scaled - season_scaled
+    kemudian diproyeksikan ke skala asli menggunakan faktor proporsional
+    dari total inverse-transform, sehingga tidak terjadi kesalahan
+    akibat bias konstanta pada transformasi StandardScaler.
     """
     import torch
 
@@ -613,90 +619,90 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         model = nf.models[0]
         model.eval()
 
-        # ── Tangkap output per blok via forward hook ─────────────
-        block_forecasts_captured = []
+        # ── Tangkap output tiap blok via PyTorch forward hook ─────
+        block_fc = []
 
         def _hook(module, inp, out):
-            # out = (backcast, forecast) — forecast shape (B, h, 1)
-            _, fc = out
-            block_forecasts_captured.append(fc.detach().cpu())
+            _, fc = out          # out = (backcast, forecast)
+            block_fc.append(fc.detach().cpu())
 
-        hooks = []
-        for blk in model.blocks:
-            hooks.append(blk.register_forward_hook(_hook))
+        hooks = [blk.register_forward_hook(_hook)
+                 for blk in model.blocks]
 
-        # Jalankan predict — hook akan mengisi block_forecasts_captured
-        _ = nf.predict(df=df_scaled, futr_df=fut_df)
+        forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
 
-        # Lepas semua hook
         for h_ in hooks:
             h_.remove()
 
-        if len(block_forecasts_captured) == 0:
+        if not block_fc:
             return {"success": False,
-                    "error": "Tidak ada output blok tertangkap"}
+                    "error": "Tidak ada output blok yang tertangkap."}
 
-        n_trend  = 3   # blok 0,1,2 = trend stack
-        n_season = 3   # blok 3,4,5 = seasonality stack
-        h_out    = model.h
+        n_trend  = 3   # blok 0-2 → stack Trend
+        n_season = 3   # blok 3-5 → stack Seasonality
 
-        # Jumlahkan forecast per stack (shape setiap blok: (1, h, 1))
-        trend_scaled  = sum(
-            block_forecasts_captured[i].squeeze(-1)
-            for i in range(min(n_trend, len(block_forecasts_captured)))
-        )  # (1, h)
+        # Jumlahkan forecast per stack dalam ruang scaled — shape (1, h)
+        trend_s  = sum(block_fc[i].squeeze(-1)
+                       for i in range(min(n_trend, len(block_fc)))
+                       ).numpy().flatten()
 
-        season_scaled = sum(
-            block_forecasts_captured[i].squeeze(-1)
-            for i in range(n_trend,
-                           min(n_trend + n_season,
-                               len(block_forecasts_captured)))
-        )  # (1, h)
+        season_s = sum(block_fc[i].squeeze(-1)
+                       for i in range(n_trend,
+                                      min(n_trend + n_season, len(block_fc)))
+                       ).numpy().flatten()
 
-        # Jalankan predict sekali lagi untuk dapat total
-        forecast_df  = nf.predict(df=df_scaled, futr_df=fut_df)
-        # Lepas hook yg terpasang ulang (tidak ada, predict sudah selesai)
+        total_s  = forecast_df[["NBEATSx"]].values.flatten()
+        exog_s   = total_s - trend_s - season_s   # residual dalam ruang scaled
 
-        total_scaled_np = forecast_df[["NBEATSx"]].values.flatten()
-        trend_np        = trend_scaled.numpy().flatten()
-        season_np       = season_scaled.numpy().flatten()
-        exog_np         = total_scaled_np - trend_np - season_np
+        # ── Proyeksi ke skala asli (skala proporsi) ───────────────
+        # Gunakan nilai total dalam skala asli sebagai basis,
+        # lalu distribusikan secara proporsional menggunakan bobot
+        # absolut masing-masing komponen dalam ruang scaled.
+        total_orig = scaler_y.inverse_transform(
+            total_s.reshape(-1, 1)).flatten()
 
-        # Inverse transform — scaler adalah StandardScaler/MinMaxScaler linear
-        # inv(a - b) ≠ inv(a) - inv(b) untuk scaler dengan mean/std
-        # Cara benar: inverse total, lalu hitung proporsi lalu skala ulang
-        def inv(arr):
-            return scaler_y.inverse_transform(
-                arr.reshape(-1, 1)).flatten()
+        def scale_component(comp_s, total_s_arr, total_orig_arr):
+            """
+            Proyeksikan komponen scaled ke skala asli secara proporsional.
+            Menggunakan rasio |comp| / sum(|komponen|) terhadap total asli.
+            """
+            abs_sum = np.abs(trend_s) + np.abs(season_s) + np.abs(exog_s)
+            abs_sum = np.where(abs_sum < 1e-12, 1.0, abs_sum)
+            weight  = np.abs(comp_s) / abs_sum
+            sign    = np.sign(comp_s)
+            return sign * weight * np.abs(total_orig_arr)
 
-        total_orig  = inv(total_scaled_np)
-        trend_orig  = inv(trend_np)
-        season_orig = inv(season_np)
+        trend_orig  = scale_component(trend_s,  total_s, total_orig)
+        season_orig = scale_component(season_s, total_s, total_orig)
+        exog_orig   = scale_component(exog_s,   total_s, total_orig)
 
-        # Eksogen dalam skala asli:
-        # total_orig = trend_orig + season_orig + exog_orig (approx, karena bias scaler)
-        # Gunakan proporsi scaled untuk estimasi eksogen
-        exog_orig = total_orig - trend_orig - season_orig
-
-        # Koreksi: pastikan jumlah = total (floating point)
         return {
             "trend":       trend_orig,
             "seasonality": season_orig,
             "exogenous":   exog_orig,
             "total":       total_orig,
+            "trend_s":     trend_s,
+            "season_s":    season_s,
+            "exog_s":      exog_s,
             "success":     True,
         }
 
     except Exception as e:
         import traceback
-        return {"success": False, "error": str(e) + "\n" + traceback.format_exc()}
+        return {"success": False,
+                "error": str(e) + "\n" + traceback.format_exc()}
 
 
 def render_decomp_tab(decomp, future_dates, label="Prediksi"):
-    """Render tab dekomposisi dengan grafik dan tabel."""
+    """
+    Menampilkan hasil dekomposisi komponen N-BEATSx:
+    grafik garis per komponen, grafik batang proporsi,
+    tabel ringkasan, dan tombol unduh CSV.
+    """
     if not decomp.get("success"):
         st.warning(
-            f"⚠️ Dekomposisi tidak tersedia: {decomp.get('error','unknown')}"
+            "⚠️ Dekomposisi tidak dapat ditampilkan: "
+            + decomp.get("error", "Terjadi kesalahan tidak diketahui.")
         )
         return
 
@@ -705,59 +711,65 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     exog_v   = decomp["exogenous"]
     total_v  = decomp["total"]
     dates    = [pd.to_datetime(d) for d in future_dates]
+    labels_x = [d.strftime("%b %Y") for d in dates]
 
-    # ── Proporsi ─────────────────────────────────────────────────
+    # ── Hitung proporsi ──────────────────────────────────────────
     props = []
     for t, s, e in zip(trend_v, season_v, exog_v):
-        total_abs = abs(t) + abs(s) + abs(e)
-        if total_abs > 1e-10:
-            props.append((abs(t)/total_abs*100,
-                          abs(s)/total_abs*100,
-                          abs(e)/total_abs*100))
-        else:
-            props.append((33.3, 33.3, 33.3))
+        denom = abs(t) + abs(s) + abs(e)
+        denom = denom if denom > 1e-12 else 1.0
+        props.append((abs(t)/denom*100,
+                      abs(s)/denom*100,
+                      abs(e)/denom*100))
 
     avg_t = np.mean([p[0] for p in props])
     avg_s = np.mean([p[1] for p in props])
     avg_e = np.mean([p[2] for p in props])
 
-    # ── Metrik proporsi ──────────────────────────────────────────
+    # ── Kartu ringkasan proporsi ─────────────────────────────────
     dc1, dc2, dc3 = st.columns(3)
-    for col, (lbl, val, color) in zip(
+    for col, (lbl, val, color, desc) in zip(
         [dc1, dc2, dc3],
-        [("Trend",       f"{avg_t:.1f}%", "#68D391"),
-         ("Seasonality", f"{avg_s:.1f}%", "#F6AD55"),
-         ("Eksogen",     f"{avg_e:.1f}%", "#63B3ED")]
+        [("Proporsi Trend",       f"{avg_t:.1f}%", "#68D391",
+          "Stack Trend (Blok 0–2)"),
+         ("Proporsi Seasonality", f"{avg_s:.1f}%", "#F6AD55",
+          "Stack Seasonality (Blok 3–5)"),
+         ("Proporsi Eksogen",     f"{avg_e:.1f}%", "#63B3ED",
+          "BI Rate · Minyak · Kurs · Lag")]
     ):
         with col:
             st.markdown(
                 f"""<div class="metric-card">
-                    <div class="metric-label">Proporsi {lbl}</div>
+                    <div class="metric-label">{lbl}</div>
                     <div class="metric-value" style="color:{color};">{val}</div>
-                    <div class="metric-sub">Rata-rata 6 bulan</div>
+                    <div class="metric-sub">{desc}</div>
                 </div>""",
                 unsafe_allow_html=True
             )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Grafik dekomposisi ────────────────────────────────────────
     set_dark_style()
-    fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
-    fig.suptitle(
-        f"Dekomposisi Komponen N-BEATSx — {label}",
-        fontsize=11, color="#E8EAF0", fontfamily="monospace", y=1.01
-    )
 
-    pairs = [
-        (axes[0], trend_v,  "#68D391", "Trend"),
-        (axes[1], season_v, "#F6AD55", "Seasonality"),
-        (axes[2], exog_v,   "#63B3ED", "Eksogen"),
+    # ── Grafik 1: Garis per komponen (3 subplot) ─────────────────
+    st.markdown(
+        "<div class='section-header'>Grafik Komponen Prediksi</div>",
+        unsafe_allow_html=True
+    )
+    fig1, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
+    fig1.suptitle(
+        f"Dekomposisi Komponen N-BEATSx — {label}",
+        fontsize=10, color="#E8EAF0", fontfamily="monospace", y=1.01
+    )
+    comp_cfg = [
+        (axes[0], trend_v,  "#68D391", "Trend (Stack 0–2)"),
+        (axes[1], season_v, "#F6AD55", "Seasonality (Stack 3–5)"),
+        (axes[2], exog_v,   "#63B3ED",
+         "Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag Inflasi)"),
     ]
-    for ax, vals, color, title in pairs:
-        ax.plot(dates, vals * 100,
-                color=color, linewidth=2,
-                marker="o", markersize=5, label=title)
+    for ax, vals, color, title in comp_cfg:
+        ax.plot(dates, vals * 100, color=color,
+                linewidth=2, marker="o", markersize=5)
         ax.fill_between(dates, vals * 100, 0,
                         alpha=0.1, color=color)
         for d, v in zip(dates, vals):
@@ -768,8 +780,8 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
                 fontfamily="monospace"
             )
         ax.set_ylabel("Kontribusi (%)", fontsize=8)
-        ax.set_title(title, fontsize=9,
-                     color=color, pad=5, fontfamily="monospace")
+        ax.set_title(title, fontsize=8.5, color=color,
+                     pad=4, fontfamily="monospace")
         ax.grid(True, alpha=0.3)
         ax.axhline(0, color="#4A5568", linewidth=0.8, linestyle="--")
         ax.yaxis.set_major_formatter(
@@ -779,43 +791,86 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     plt.setp(axes[-1].xaxis.get_majorticklabels(),
              rotation=30, ha="right")
     plt.tight_layout()
-    st.pyplot(fig)
+    st.pyplot(fig1)
     plt.close()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Tabel dekomposisi ─────────────────────────────────────────
+    # ── Grafik 2: Batang proporsi per bulan ──────────────────────
+    st.markdown(
+        "<div class='section-header'>Grafik Batang Proporsi Komponen</div>",
+        unsafe_allow_html=True
+    )
+    fig2, ax2 = plt.subplots(figsize=(11, 4.5))
+    x     = np.arange(len(dates))
+    width = 0.25
+
+    bar_t = ax2.bar(x - width, [p[0] for p in props],
+                    width, label="Trend", color="#68D391", alpha=0.85)
+    bar_s = ax2.bar(x,         [p[1] for p in props],
+                    width, label="Seasonality", color="#F6AD55", alpha=0.85)
+    bar_e = ax2.bar(x + width, [p[2] for p in props],
+                    width, label="Eksogen", color="#63B3ED", alpha=0.85)
+
+    for bars, color in [(bar_t, "#68D391"),
+                        (bar_s, "#F6AD55"),
+                        (bar_e, "#63B3ED")]:
+        for bar in bars:
+            h = bar.get_height()
+            ax2.annotate(
+                f"{h:.1f}%",
+                xy=(bar.get_x() + bar.get_width() / 2, h),
+                xytext=(0, 4), textcoords="offset points",
+                ha="center", va="bottom",
+                fontsize=7.5, color=color, fontfamily="monospace"
+            )
+
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(labels_x, rotation=30, ha="right")
+    ax2.set_ylabel("Proporsi (%)", fontsize=9)
+    ax2.set_ylim(0, 110)
+    ax2.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda x, _: f"{x:.0f}%"))
+    ax2.legend(fontsize=9, framealpha=0.3,
+               facecolor="#1A202C", edgecolor="#2D3748")
+    ax2.grid(True, alpha=0.3, axis="y")
+    ax2.set_title(
+        "Proporsi Kontribusi Komponen per Periode",
+        fontsize=10, pad=10, color="#E8EAF0", fontfamily="monospace"
+    )
+    plt.tight_layout()
+    st.pyplot(fig2)
+    plt.close()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Tabel dekomposisi ────────────────────────────────────────
     st.markdown(
         "<div class='section-header'>Tabel Dekomposisi</div>",
         unsafe_allow_html=True
     )
     rows_d = ""
     for i, d in enumerate(dates):
-        t_pct = trend_v[i]  * 100
-        s_pct = season_v[i] * 100
-        e_pct = exog_v[i]   * 100
-        total_pct = total_v[i] * 100
         pr_t, pr_s, pr_e = props[i]
         rows_d += (
             f"<tr>"
             f"<td>{d.strftime('%B %Y')}</td>"
-            f"<td style='color:#63B3ED;font-weight:600;'>{total_pct:.4f}%</td>"
-            f"<td style='color:#68D391;'>{t_pct:.4f}%</td>"
-            f"<td style='color:#F6AD55;'>{s_pct:.4f}%</td>"
-            f"<td style='color:#63B3ED;'>{e_pct:.4f}%</td>"
-            f"<td style='color:#718096;font-size:0.78rem;'>"
-            f"T:{pr_t:.1f}% S:{pr_s:.1f}% E:{pr_e:.1f}%</td>"
+            f"<td style='color:#63B3ED;font-weight:600;'>"
+            f"  {total_v[i]*100:.4f}%</td>"
+            f"<td style='color:#68D391;'>{trend_v[i]*100:.4f}%</td>"
+            f"<td style='color:#F6AD55;'>{season_v[i]*100:.4f}%</td>"
+            f"<td style='color:#63B3ED;'>{exog_v[i]*100:.4f}%</td>"
+            f"<td style='color:#68D391;'>{pr_t:.1f}%</td>"
+            f"<td style='color:#F6AD55;'>{pr_s:.1f}%</td>"
+            f"<td style='color:#63B3ED;'>{pr_e:.1f}%</td>"
             f"</tr>"
         )
     st.markdown(
         f"""<table class="pred-table">
             <tr>
-                <th>Periode</th>
-                <th>Total</th>
-                <th>Trend</th>
-                <th>Seasonality</th>
-                <th>Eksogen</th>
-                <th>Proporsi</th>
+                <th>Periode</th><th>Total Prediksi</th>
+                <th>Trend</th><th>Seasonality</th><th>Eksogen</th>
+                <th>% Trend</th><th>% Season</th><th>% Eksogen</th>
             </tr>
             {rows_d}
         </table>""",
@@ -826,36 +881,38 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     st.markdown(
         f"""<div style="background:#1A202C;border:1px solid #2D3748;
                     border-radius:8px;padding:0.75rem 1rem;margin-top:0.75rem;
-                    font-size:0.82rem;color:#A0AEC0;">
-            <b style="color:#E8EAF0;">Rata-rata Kontribusi:</b>
-            &nbsp; Trend: <b style="color:#68D391;">{np.mean(trend_v)*100:.4f}%</b>
-            &nbsp;·&nbsp; Seasonality: <b style="color:#F6AD55;">{np.mean(season_v)*100:.4f}%</b>
-            &nbsp;·&nbsp; Eksogen: <b style="color:#63B3ED;">{np.mean(exog_v)*100:.4f}%</b>
-            &nbsp;·&nbsp; Proporsi Eksogen: <b style="color:#63B3ED;">{avg_e:.1f}%</b>
+                    font-size:0.82rem;color:#A0AEC0;line-height:1.8;">
+            <b style="color:#E8EAF0;">Rata-rata Kontribusi per Komponen:</b><br>
+            Trend: <b style="color:#68D391;">{np.mean(trend_v)*100:.4f}%</b>
+            ({avg_t:.1f}%) &nbsp;·&nbsp;
+            Seasonality: <b style="color:#F6AD55;">
+            {np.mean(season_v)*100:.4f}%</b>
+            ({avg_s:.1f}%) &nbsp;·&nbsp;
+            Eksogen: <b style="color:#63B3ED;">
+            {np.mean(exog_v)*100:.4f}%</b>
+            ({avg_e:.1f}%)
         </div>""",
         unsafe_allow_html=True
     )
 
-    # Download tabel
+    # ── Tombol unduh ─────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
     dl_decomp = pd.DataFrame({
-        "Periode":     [d.strftime("%Y-%m") for d in dates],
-        "Total_%":     [f"{v*100:.4f}" for v in total_v],
-        "Trend_%":     [f"{v*100:.4f}" for v in trend_v],
-        "Seasonality_%": [f"{v*100:.4f}" for v in season_v],
-        "Eksogen_%":   [f"{v*100:.4f}" for v in exog_v],
-        "Proporsi_Trend_%":      [f"{p[0]:.2f}" for p in props],
+        "Periode":              [d.strftime("%Y-%m") for d in dates],
+        "Total_Prediksi_%":     [f"{v*100:.4f}" for v in total_v],
+        "Trend_%":              [f"{v*100:.4f}" for v in trend_v],
+        "Seasonality_%":        [f"{v*100:.4f}" for v in season_v],
+        "Eksogen_%":            [f"{v*100:.4f}" for v in exog_v],
+        "Proporsi_Trend_%":     [f"{p[0]:.2f}" for p in props],
         "Proporsi_Seasonality_%":[f"{p[1]:.2f}" for p in props],
-        "Proporsi_Eksogen_%":    [f"{p[2]:.2f}" for p in props],
+        "Proporsi_Eksogen_%":   [f"{p[2]:.2f}" for p in props],
     })
     st.download_button(
-        "⬇️ Download Tabel Dekomposisi (CSV)",
+        "⬇️ Unduh Tabel Dekomposisi (CSV)",
         dl_decomp.to_csv(index=False).encode("utf-8"),
         file_name="dekomposisi_nbeatsx.csv",
         mime="text/csv"
     )
-
-
-
 
 def page_upload():
     st.markdown(
@@ -880,7 +937,7 @@ def page_upload():
         <div class="info-box">
             <b>Format:</b> CSV (.csv) atau Excel (.xlsx) &nbsp;·&nbsp;
             <b>Maks:</b> 200 MB &nbsp;·&nbsp;
-            <b>Frekuensi:</b> Bulanan (min. 13 baris)
+            <b>Frekuensi:</b> Bulanan (min. 36 baris)
         </div>
         """,
         unsafe_allow_html=True
@@ -1870,7 +1927,7 @@ def page_prediksi():
             • <code>BI Rate</code> — Suku bunga kebijakan (desimal)<br>
             • <code>Harga Minyak Dunia</code> — USD per barel<br>
             • <code>Kurs USD/IDR</code> — Nilai tukar rupiah<br><br>
-            <b>Frekuensi:</b> Bulanan · <b>Minimum:</b> 13 baris
+            <b>Frekuensi:</b> Bulanan · <b>Minimum:</b> 36 baris
         </div>
         <div class='warning-box' style='margin-top:1rem;'>
             <b>Catatan:</b> Prediksi bersifat indikatif berdasarkan pola
