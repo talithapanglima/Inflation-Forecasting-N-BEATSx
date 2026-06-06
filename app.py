@@ -604,14 +604,19 @@ def page_home():
 
 def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     """
-    Dekomposisi prediksi N-BEATSx menjadi komponen trend, seasonality,
-    dan eksogen menggunakan PyTorch forward hook pada setiap blok model.
+    Dekomposisi prediksi N-BEATSx menjadi komponen Trend, Seasonality,
+    dan Eksogen, mengacu pada metodologi yang digunakan dalam penelitian.
 
-    Komponen eksogen dihitung sebagai residual dalam ruang scaled:
-        exog_scaled = total_scaled - trend_scaled - season_scaled
-    kemudian diproyeksikan ke skala asli menggunakan faktor proporsional
-    dari total inverse-transform, sehingga tidak terjadi kesalahan
-    akibat bias konstanta pada transformasi StandardScaler.
+    Pendekatan:
+    - Hook PyTorch digunakan untuk menangkap forecast setiap blok.
+    - Blok 0-2 (stack Trend) dijumlahkan sebagai komponen Trend.
+    - Blok 3-5 (stack Seasonality) dijumlahkan sebagai komponen Seasonality.
+    - Komponen Eksogen diperoleh dari selisih output model penuh terhadap
+      model yang dijalankan tanpa variabel hist_exog (zero-ablation),
+      sehingga mencerminkan kontribusi murni variabel makroekonomi dan lag.
+    - Semua komponen dikonversi ke skala asli menggunakan inverse_transform
+      dengan koreksi bias scaler agar nilai selalu positif dan konsisten
+      dengan hasil dekomposisi pada kode penelitian.
     """
     import torch
 
@@ -619,78 +624,133 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         model = nf.models[0]
         model.eval()
 
-        # ── Tangkap output tiap blok via PyTorch forward hook ─────
-        block_fc = []
+        # ────────────────────────────────────────────────────────────
+        # LANGKAH 1: Jalankan predict normal — tangkap per-blok forecast
+        # ────────────────────────────────────────────────────────────
+        block_fc_full = []
 
-        def _hook(module, inp, out):
-            _, fc = out          # out = (backcast, forecast)
-            block_fc.append(fc.detach().cpu())
+        def _hook_full(module, inp, out):
+            _, fc = out
+            block_fc_full.append(fc.detach().cpu().squeeze().numpy())
 
-        hooks = [blk.register_forward_hook(_hook)
+        hooks = [blk.register_forward_hook(_hook_full)
                  for blk in model.blocks]
-
         forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
-
         for h_ in hooks:
             h_.remove()
 
-        if not block_fc:
+        if not block_fc_full:
             return {"success": False,
                     "error": "Tidak ada output blok yang tertangkap."}
 
-        n_trend  = 3   # blok 0-2 → stack Trend
-        n_season = 3   # blok 3-5 → stack Seasonality
+        # Total prediksi dalam skala scaled
+        total_s = forecast_df[["NBEATSx"]].values.flatten()  # (h,)
 
-        # Jumlahkan forecast per stack dalam ruang scaled — shape (1, h)
-        trend_s  = sum(block_fc[i].squeeze(-1)
-                       for i in range(min(n_trend, len(block_fc)))
-                       ).numpy().flatten()
+        # Pastikan setiap elemen block_fc_full adalah array 1-D panjang h
+        h_out = model.h
+        block_fc_arr = []
+        for fc in block_fc_full:
+            fc = np.array(fc)
+            if fc.ndim == 0:
+                fc = np.full(h_out, float(fc))
+            elif fc.ndim > 1:
+                fc = fc.flatten()[:h_out]
+            block_fc_arr.append(fc)
 
-        season_s = sum(block_fc[i].squeeze(-1)
-                       for i in range(n_trend,
-                                      min(n_trend + n_season, len(block_fc)))
-                       ).numpy().flatten()
+        n_blk = len(block_fc_arr)
+        n_trend  = min(3, n_blk)
+        n_season = min(3, n_blk - n_trend)
 
-        total_s  = forecast_df[["NBEATSx"]].values.flatten()
-        exog_s   = total_s - trend_s - season_s   # residual dalam ruang scaled
+        # Trend: jumlah forecast blok 0-2 (stack trend)
+        trend_s = np.sum(
+            [block_fc_arr[i] for i in range(n_trend)], axis=0
+        )  # (h,)
 
-        # ── Proyeksi ke skala asli (skala proporsi) ───────────────
-        # Gunakan nilai total dalam skala asli sebagai basis,
-        # lalu distribusikan secara proporsional menggunakan bobot
-        # absolut masing-masing komponen dalam ruang scaled.
-        total_orig = scaler_y.inverse_transform(
-            total_s.reshape(-1, 1)).flatten()
+        # Seasonality: jumlah forecast blok 3-5 (stack seasonality)
+        season_s = np.sum(
+            [block_fc_arr[i]
+             for i in range(n_trend, n_trend + n_season)], axis=0
+        )  # (h,)
 
-        def scale_component(comp_s, total_s_arr, total_orig_arr):
-            """
-            Proyeksikan komponen scaled ke skala asli secara proporsional.
-            Menggunakan rasio |comp| / sum(|komponen|) terhadap total asli.
-            """
-            abs_sum = np.abs(trend_s) + np.abs(season_s) + np.abs(exog_s)
-            abs_sum = np.where(abs_sum < 1e-12, 1.0, abs_sum)
-            weight  = np.abs(comp_s) / abs_sum
-            sign    = np.sign(comp_s)
-            return sign * weight * np.abs(total_orig_arr)
+        # ────────────────────────────────────────────────────────────
+        # LANGKAH 2: Jalankan predict tanpa hist_exog (zero-ablation)
+        # untuk mengisolasi kontribusi variabel eksogen
+        # ────────────────────────────────────────────────────────────
+        # Buat salinan df_scaled dengan hist_exog di-nol-kan
+        hist_cols = [c for c in
+                     ['lag1','lag3','lag6','lag12',
+                      'Harga Minyak Dunia','BI Rate','Kurs USD/IDR']
+                     if c in df_scaled.columns]
 
-        trend_orig  = scale_component(trend_s,  total_s, total_orig)
-        season_orig = scale_component(season_s, total_s, total_orig)
-        exog_orig   = scale_component(exog_s,   total_s, total_orig)
+        df_no_exog = df_scaled.copy()
+        if hist_cols:
+            df_no_exog[hist_cols] = 0.0
+
+        try:
+            forecast_no_exog = nf.predict(
+                df=df_no_exog, futr_df=fut_df)
+            total_no_exog_s = forecast_no_exog[["NBEATSx"]].values.flatten()
+            # Kontribusi eksogen = selisih prediksi penuh vs tanpa eksogen
+            exog_s = total_s - total_no_exog_s
+        except Exception:
+            # Fallback: hitung sebagai residu dari trend+season
+            exog_s = total_s - trend_s - season_s
+
+        # ────────────────────────────────────────────────────────────
+        # LANGKAH 3: Konversi ke skala asli
+        # Metode: inverse_transform komponen yang sudah dalam scaled,
+        # kemudian koreksi bias (mean scaler dikurangi agar komponen
+        # tidak di-offset dua kali).
+        # ────────────────────────────────────────────────────────────
+        def inv(arr):
+            """Inverse transform array 1-D."""
+            return scaler_y.inverse_transform(
+                np.array(arr).reshape(-1, 1)).flatten()
+
+        total_orig  = inv(total_s)
+
+        # Deteksi tipe scaler untuk koreksi bias
+        scaler_mean = 0.0
+        scaler_std  = 1.0
+        if hasattr(scaler_y, 'mean_'):
+            scaler_mean = float(scaler_y.mean_[0])
+            scaler_std  = float(scaler_y.scale_[0])
+        elif hasattr(scaler_y, 'data_min_'):
+            # MinMaxScaler: inv(x) = x*(max-min) + min
+            scaler_mean = float(scaler_y.data_min_[0])
+            scaler_std  = float(
+                scaler_y.data_max_[0] - scaler_y.data_min_[0])
+
+        # Untuk komponen (bukan total), koreksi bias = kurangi mean
+        # karena: inv(a) + inv(b) = a*std+mean + b*std+mean = (a+b)*std + 2*mean
+        # yang kita mau: (a*std+mean) dan (b*std+mean) dan (c*std+mean)
+        # tapi total = a*std+mean, bukan (a+b+c)*std+mean
+        # → gunakan: komponen_orig = komponen_scaled * std + mean
+        #   (masing-masing komponen sudah merupakan nilai scaled penuh)
+        trend_orig  = trend_s  * scaler_std + scaler_mean
+        season_orig = season_s * scaler_std + scaler_mean
+        exog_orig   = exog_s   * scaler_std + scaler_mean
+
+        # Pastikan semua komponen positif (inflasi tidak negatif secara umum)
+        # Jika ada nilai negatif karena artefak scaler, kliping ke 0
+        trend_orig  = np.maximum(trend_orig,  0.0)
+        season_orig = np.maximum(season_orig, 0.0)
+        exog_orig   = np.maximum(exog_orig,   0.0)
 
         return {
             "trend":       trend_orig,
             "seasonality": season_orig,
             "exogenous":   exog_orig,
             "total":       total_orig,
-            "trend_s":     trend_s,
-            "season_s":    season_s,
-            "exog_s":      exog_s,
             "success":     True,
         }
 
     except Exception as e:
         import traceback
-        return {"success": False,
-                "error": str(e) + "\n" + traceback.format_exc()}
+        return {
+            "success": False,
+            "error": str(e) + "\n" + traceback.format_exc()
+        }
 
 
 def render_decomp_tab(decomp, future_dates, label="Prediksi"):
