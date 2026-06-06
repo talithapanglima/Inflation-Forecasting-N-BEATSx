@@ -602,21 +602,26 @@ def page_home():
 
 
 
-def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
+def decompose_forecast(nf, df_scaled, fut_df, scaler_y,
+                       scaler_exog=None, df_feat_unscaled=None,
+                       config=None):
     """
     Dekomposisi prediksi N-BEATSx menjadi komponen Trend, Seasonality,
-    dan Eksogen, mengacu pada metodologi yang digunakan dalam penelitian.
+    dan Eksogen, mengikuti metodologi kode penelitian secara tepat.
 
-    Pendekatan:
-    - Hook PyTorch digunakan untuk menangkap forecast setiap blok.
-    - Blok 0-2 (stack Trend) dijumlahkan sebagai komponen Trend.
-    - Blok 3-5 (stack Seasonality) dijumlahkan sebagai komponen Seasonality.
-    - Komponen Eksogen diperoleh dari selisih output model penuh terhadap
-      model yang dijalankan tanpa variabel hist_exog (zero-ablation),
-      sehingga mencerminkan kontribusi murni variabel makroekonomi dan lag.
-    - Semua komponen dikonversi ke skala asli menggunakan inverse_transform
-      dengan koreksi bias scaler agar nilai selalu positif dan konsisten
-      dengan hasil dekomposisi pada kode penelitian.
+    Metodologi:
+    - Hook PyTorch menangkap forecast per blok dalam ruang normalized.
+    - Blok 0-2  → stack Trend   (basis polinomial)
+    - Blok 3-5  → stack Seasonality (basis Fourier)
+    - Eksogen dihitung dari selisih prediksi penuh terhadap prediksi
+      yang dijalankan dengan hist_exog di-set ke nilai MEAN (bukan nol),
+      karena pada StandardScaler, nilai 0 dalam ruang scaled = mean asli.
+      Dengan kata lain, ablasi yang benar adalah hist_exog = mean_scaled = 0
+      dalam ruang StandardScaler, yang setara dengan memasukkan nilai
+      rata-rata historis untuk setiap variabel eksogen.
+    - Konversi ke skala asli menggunakan:
+        komponen_orig = komponen_scaled * std + mean
+      untuk menghindari double-counting bias scaler.
     """
     import torch
 
@@ -624,16 +629,15 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         model = nf.models[0]
         model.eval()
 
-        # ────────────────────────────────────────────────────────────
-        # LANGKAH 1: Jalankan predict normal — tangkap per-blok forecast
-        # ────────────────────────────────────────────────────────────
+        # ── Langkah 1: Hook — tangkap forecast per blok ──────────
         block_fc_full = []
 
-        def _hook_full(module, inp, out):
+        def _hook(module, inp, out):
             _, fc = out
-            block_fc_full.append(fc.detach().cpu().squeeze().numpy())
+            arr = fc.detach().cpu().squeeze().numpy()
+            block_fc_full.append(np.atleast_1d(arr).flatten())
 
-        hooks = [blk.register_forward_hook(_hook_full)
+        hooks = [blk.register_forward_hook(_hook)
                  for blk in model.blocks]
         forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
         for h_ in hooks:
@@ -643,96 +647,85 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
             return {"success": False,
                     "error": "Tidak ada output blok yang tertangkap."}
 
-        # Total prediksi dalam skala scaled
-        total_s = forecast_df[["NBEATSx"]].values.flatten()  # (h,)
-
-        # Pastikan setiap elemen block_fc_full adalah array 1-D panjang h
-        h_out = model.h
-        block_fc_arr = []
-        for fc in block_fc_full:
-            fc = np.array(fc)
-            if fc.ndim == 0:
-                fc = np.full(h_out, float(fc))
-            elif fc.ndim > 1:
-                fc = fc.flatten()[:h_out]
-            block_fc_arr.append(fc)
-
-        n_blk = len(block_fc_arr)
+        h_out    = model.h
+        n_blk    = len(block_fc_full)
         n_trend  = min(3, n_blk)
         n_season = min(3, n_blk - n_trend)
 
-        # Trend: jumlah forecast blok 0-2 (stack trend)
-        trend_s = np.sum(
-            [block_fc_arr[i] for i in range(n_trend)], axis=0
-        )  # (h,)
+        # Pastikan setiap blok berukuran (h,)
+        blks = []
+        for fc in block_fc_full:
+            fc = np.array(fc, dtype=float).flatten()
+            if len(fc) < h_out:
+                fc = np.pad(fc, (0, h_out - len(fc)))
+            else:
+                fc = fc[:h_out]
+            blks.append(fc)
 
-        # Seasonality: jumlah forecast blok 3-5 (stack seasonality)
+        trend_s  = np.sum([blks[i] for i in range(n_trend)], axis=0)
         season_s = np.sum(
-            [block_fc_arr[i]
-             for i in range(n_trend, n_trend + n_season)], axis=0
-        )  # (h,)
+            [blks[i] for i in range(n_trend, n_trend + n_season)],
+            axis=0)
+        total_s  = forecast_df[["NBEATSx"]].values.flatten()
 
-        # ────────────────────────────────────────────────────────────
-        # LANGKAH 2: Jalankan predict tanpa hist_exog (zero-ablation)
-        # untuk mengisolasi kontribusi variabel eksogen
-        # ────────────────────────────────────────────────────────────
-        # Buat salinan df_scaled dengan hist_exog di-nol-kan
+        # ── Langkah 2: Ablasi eksogen yang benar ─────────────────
+        # StandardScaler: nilai 0 dalam ruang scaled = mean historis.
+        # Maka untuk "menghilangkan" pengaruh eksogen, set hist_exog = 0
+        # (dalam ruang scaled) — ini sudah BENAR karena berarti model
+        # menerima nilai rata-rata historis, bukan sinyal apapun.
         hist_cols = [c for c in
                      ['lag1','lag3','lag6','lag12',
                       'Harga Minyak Dunia','BI Rate','Kurs USD/IDR']
                      if c in df_scaled.columns]
 
-        df_no_exog = df_scaled.copy()
+        # Jalankan predict tanpa sinyal eksogen (= mean, yaitu 0 di scaled)
+        df_ablated = df_scaled.copy()
         if hist_cols:
-            df_no_exog[hist_cols] = 0.0
+            df_ablated[hist_cols] = 0.0   # 0 scaled = nilai rata-rata
+
+        # Juga nol-kan futr_exog (dummy kalender) untuk ablasi penuh
+        futr_cols = ['Ramadhan','Idulfitri','Natal','Imlek']
+        fut_ablated = fut_df.copy()
+        for c in futr_cols:
+            if c in fut_ablated.columns:
+                fut_ablated[c] = 0
 
         try:
-            forecast_no_exog = nf.predict(
-                df=df_no_exog, futr_df=fut_df)
-            total_no_exog_s = forecast_no_exog[["NBEATSx"]].values.flatten()
-            # Kontribusi eksogen = selisih prediksi penuh vs tanpa eksogen
-            exog_s = total_s - total_no_exog_s
+            forecast_ablated = nf.predict(
+                df=df_ablated, futr_df=fut_ablated)
+            total_ablated_s = forecast_ablated[["NBEATSx"]].values.flatten()
+            exog_s = total_s - total_ablated_s
         except Exception:
-            # Fallback: hitung sebagai residu dari trend+season
+            # Fallback: residu dari trend + season
             exog_s = total_s - trend_s - season_s
 
-        # ────────────────────────────────────────────────────────────
-        # LANGKAH 3: Konversi ke skala asli
-        # Metode: inverse_transform komponen yang sudah dalam scaled,
-        # kemudian koreksi bias (mean scaler dikurangi agar komponen
-        # tidak di-offset dua kali).
-        # ────────────────────────────────────────────────────────────
-        def inv(arr):
-            """Inverse transform array 1-D."""
-            return scaler_y.inverse_transform(
-                np.array(arr).reshape(-1, 1)).flatten()
-
-        total_orig  = inv(total_s)
-
-        # Deteksi tipe scaler untuk koreksi bias
-        scaler_mean = 0.0
-        scaler_std  = 1.0
+        # ── Langkah 3: Konversi ke skala asli ────────────────────
+        # Deteksi parameter scaler
         if hasattr(scaler_y, 'mean_'):
-            scaler_mean = float(scaler_y.mean_[0])
-            scaler_std  = float(scaler_y.scale_[0])
+            # StandardScaler: inv(x) = x * scale_ + mean_
+            s_mean = float(scaler_y.mean_[0])
+            s_std  = float(scaler_y.scale_[0])
         elif hasattr(scaler_y, 'data_min_'):
             # MinMaxScaler: inv(x) = x*(max-min) + min
-            scaler_mean = float(scaler_y.data_min_[0])
-            scaler_std  = float(
-                scaler_y.data_max_[0] - scaler_y.data_min_[0])
+            s_mean = float(scaler_y.data_min_[0])
+            s_std  = float(scaler_y.data_max_[0] - scaler_y.data_min_[0])
+        else:
+            s_mean = 0.0
+            s_std  = 1.0
 
-        # Untuk komponen (bukan total), koreksi bias = kurangi mean
-        # karena: inv(a) + inv(b) = a*std+mean + b*std+mean = (a+b)*std + 2*mean
-        # yang kita mau: (a*std+mean) dan (b*std+mean) dan (c*std+mean)
-        # tapi total = a*std+mean, bukan (a+b+c)*std+mean
-        # → gunakan: komponen_orig = komponen_scaled * std + mean
-        #   (masing-masing komponen sudah merupakan nilai scaled penuh)
-        trend_orig  = trend_s  * scaler_std + scaler_mean
-        season_orig = season_s * scaler_std + scaler_mean
-        exog_orig   = exog_s   * scaler_std + scaler_mean
+        # Konversi komponen: masing-masing komponen adalah nilai scaled
+        # yang sudah merepresentasikan kontribusi dalam ruang asli
+        # dengan mengalikan scale dan menambah mean
+        trend_orig  = trend_s  * s_std + s_mean
+        season_orig = season_s * s_std + s_mean
+        exog_orig   = exog_s   * s_std + s_mean
 
-        # Pastikan semua komponen positif (inflasi tidak negatif secara umum)
-        # Jika ada nilai negatif karena artefak scaler, kliping ke 0
+        # Total dari inverse transform resmi (referensi)
+        total_orig = scaler_y.inverse_transform(
+            total_s.reshape(-1, 1)).flatten()
+
+        # Kliping ke nilai minimum 0 (inflasi tidak boleh negatif
+        # secara struktural dalam skala asli)
         trend_orig  = np.maximum(trend_orig,  0.0)
         season_orig = np.maximum(season_orig, 0.0)
         exog_orig   = np.maximum(exog_orig,   0.0)
@@ -1044,11 +1037,11 @@ def page_upload():
                 ["ds","y","BI Rate","Harga Minyak Dunia","Kurs USD/IDR"]
                 if c in df_show.columns]
             st.dataframe(
-                df_show[show_cols].tail(8).style.format({
+                df_show[show_cols].head(5).style.format({
                     "y": "{:.4f}", "BI Rate": "{:.4f}",
                     "Harga Minyak Dunia": "{:.2f}", "Kurs USD/IDR": "{:.0f}",
                 }),
-                use_container_width=True, height=260
+                use_container_width=True, height=220
             )
             col_s1, col_s2, col_s3, col_s4 = st.columns(4)
             with col_s1:
