@@ -605,21 +605,21 @@ def page_home():
 def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     """
     Dekomposisi prediksi N-BEATSx menjadi komponen Trend, Seasonality,
-    dan Eksogen, mengikuti metodologi kode penelitian secara tepat.
+    dan Eksogen.
 
-    Metodologi (sesuai kode penelitian):
-    - Hook PyTorch menangkap forecast RAW setiap blok sebelum
-      proses residual antar blok.
-    - Blok 0-2 dijumlahkan → komponen Trend (stack basis polinomial).
-    - Blok 3-5 dijumlahkan → komponen Seasonality (basis Fourier).
-    - Komponen Eksogen diperoleh dari forward pass kedua dengan
-      hist_exog = rata-rata (0 dalam ruang StandardScaler), yang
-      menghasilkan kontribusi murni variabel eksogen (BI Rate,
-      harga minyak, kurs USD/IDR, lag inflasi).
-    - Proporsi dihitung dari jumlah absolut ketiga komponen (bukan
-      dari total prediksi), sesuai dengan metodologi penelitian:
-          pct_X = |X| / (|Trend| + |Seasonality| + |Eksogen|) × 100
-    - Konversi ke skala asli: komponen_orig = komponen_scaled × std + mean
+    Metodologi mengikuti kode penelitian:
+    1. Hook PyTorch menangkap forecast per blok dalam ruang scaled.
+    2. Blok 0-2 dijumlahkan → trend_scaled.
+    3. Blok 3-5 dijumlahkan → season_scaled.
+    4. exog_scaled = total_scaled - trend_scaled - season_scaled.
+    5. Masing-masing komponen di-inverse_transform secara INDEPENDEN,
+       identik dengan: scaler_y.inverse_transform([[komponen_scaled]]).
+       Pendekatan ini menghasilkan setiap komponen dalam skala asli
+       yang masing-masing mengandung offset mean scaler, sehingga
+       jumlah ketiga komponen > total prediksi — konsisten dengan
+       hasil kode penelitian.
+    6. Proporsi dihitung dari:
+       pct_X = |X_orig| / (|trend_orig|+|season_orig|+|exog_orig|) × 100
     """
     import torch
 
@@ -627,7 +627,7 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         model = nf.models[0]
         model.eval()
 
-        # ── Langkah 1: Tangkap forecast RAW per blok ─────────────
+        # ── Langkah 1: Tangkap forecast per blok via hook ────────
         block_fc = []
 
         def _hook(module, inp, out):
@@ -650,109 +650,35 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         n_trend  = min(3, n_blk)
         n_season = min(3, n_blk - n_trend)
 
-        # Seragamkan panjang tiap blok menjadi h_out
+        # Seragamkan panjang tiap blok → (h_out,)
         blks = []
         for fc in block_fc:
             fc = np.array(fc, dtype=float).flatten()
             fc = fc[:h_out] if len(fc) >= h_out else                  np.pad(fc, (0, h_out - len(fc)))
             blks.append(fc)
 
-        # Jumlah forecast per stack (scaled)
-        trend_s  = np.sum([blks[i] for i in range(n_trend)], axis=0)
+        # ── Langkah 2: Jumlahkan per stack (scaled) ──────────────
+        trend_s  = np.sum([blks[i] for i in range(n_trend)],
+                          axis=0)  # (h_out,)
         season_s = np.sum(
             [blks[i] for i in range(n_trend, n_trend + n_season)],
-            axis=0)
+            axis=0)  # (h_out,)
+        total_s  = forecast_df[["NBEATSx"]].values.flatten()
+        exog_s   = total_s - trend_s - season_s
 
-        # ── Langkah 2: Isolasi eksogen via forward pass kedua ─────
-        # Dalam StandardScaler, nilai 0 dalam ruang scaled = mean asli.
-        # Menset hist_exog = 0 berarti model menerima sinyal rata-rata
-        # tanpa fluktuasi — ini merupakan cara yang tepat untuk
-        # mengisolasi kontribusi variabel eksogen.
-        hist_cols = [c for c in
-                     ['lag1','lag3','lag6','lag12',
-                      'Harga Minyak Dunia','BI Rate','Kurs USD/IDR']
-                     if c in df_scaled.columns]
+        # ── Langkah 3: Inverse transform per komponen (KUNCI) ────
+        # Identik dengan kode penelitian:
+        #   scaler_y.inverse_transform(df[[col]])
+        # Setiap komponen dikonversi independen sehingga masing-masing
+        # mengandung offset mean — ini adalah perilaku yang diharapkan.
+        def inv(arr_1d):
+            return scaler_y.inverse_transform(
+                arr_1d.reshape(-1, 1)).flatten()
 
-        df_ablated  = df_scaled.copy()
-        fut_ablated = fut_df.copy()
-
-        if hist_cols:
-            df_ablated[hist_cols] = 0.0
-
-        for c in ['Ramadhan','Idulfitri','Natal','Imlek']:
-            if c in fut_ablated.columns:
-                fut_ablated[c] = 0
-
-        # Tangkap juga per blok saat ablasi
-        block_fc_abl = []
-        def _hook_abl(module, inp, out):
-            _, fc = out
-            arr = fc.detach().cpu().squeeze().numpy()
-            block_fc_abl.append(np.atleast_1d(arr.flatten()))
-
-        hooks_abl = [blk.register_forward_hook(_hook_abl)
-                     for blk in model.blocks]
-        try:
-            forecast_abl = nf.predict(df=df_ablated, futr_df=fut_ablated)
-        except Exception:
-            forecast_abl = None
-        for h_ in hooks_abl:
-            h_.remove()
-
-        if forecast_abl is not None and block_fc_abl:
-            blks_abl = []
-            for fc in block_fc_abl:
-                fc = np.array(fc, dtype=float).flatten()
-                fc = fc[:h_out] if len(fc) >= h_out else                      np.pad(fc, (0, h_out - len(fc)))
-                blks_abl.append(fc)
-
-            # Eksogen per blok = perbedaan output tiap blok
-            # antara prediksi penuh dan prediksi tanpa sinyal eksogen
-            trend_abl_s  = np.sum(
-                [blks_abl[i] for i in range(n_trend)], axis=0)
-            season_abl_s = np.sum(
-                [blks_abl[i] for i in range(n_trend, n_trend+n_season)],
-                axis=0)
-
-            # Kontribusi eksogen pada setiap stack
-            exog_from_trend  = trend_s  - trend_abl_s
-            exog_from_season = season_s - season_abl_s
-
-            # Total eksogen = selisih seluruh prediksi
-            total_s     = forecast_df[["NBEATSx"]].values.flatten()
-            total_abl_s = forecast_abl[["NBEATSx"]].values.flatten()
-            exog_s = total_s - total_abl_s
-
-        else:
-            # Fallback
-            total_s = forecast_df[["NBEATSx"]].values.flatten()
-            exog_s  = total_s - trend_s - season_s
-
-        # ── Langkah 3: Konversi ke skala asli ────────────────────
-        if hasattr(scaler_y, 'mean_'):
-            s_mean = float(scaler_y.mean_[0])
-            s_std  = float(scaler_y.scale_[0])
-        elif hasattr(scaler_y, 'data_min_'):
-            s_mean = float(scaler_y.data_min_[0])
-            s_std  = float(scaler_y.data_max_[0] - scaler_y.data_min_[0])
-        else:
-            s_mean = 0.0
-            s_std  = 1.0
-
-        # Konversi individual: komponen_orig = komponen_scaled * std + mean
-        trend_orig  = trend_s  * s_std + s_mean
-        season_orig = season_s * s_std + s_mean
-        exog_orig   = np.abs(exog_s) * s_std + s_mean
-
-        # Total dari inverse transform resmi
-        total_orig = scaler_y.inverse_transform(
-            forecast_df[["NBEATSx"]].values.flatten().reshape(-1, 1)
-        ).flatten()
-
-        # Pastikan tidak negatif
-        trend_orig  = np.maximum(trend_orig,  1e-8)
-        season_orig = np.maximum(season_orig, 1e-8)
-        exog_orig   = np.maximum(exog_orig,   1e-8)
+        trend_orig  = inv(trend_s)
+        season_orig = inv(season_s)
+        exog_orig   = inv(exog_s)
+        total_orig  = inv(total_s)
 
         return {
             "trend":       trend_orig,
@@ -790,10 +716,7 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     dates    = [pd.to_datetime(d) for d in future_dates]
     labels_x = [d.strftime("%b %Y") for d in dates]
 
-    # ── Hitung proporsi (sesuai metodologi penelitian) ───────────
-    # Proporsi dihitung dari jumlah absolut ketiga komponen,
-    # bukan dari total prediksi. Ini mencerminkan kontribusi
-    # relatif masing-masing komponen dalam pembentukan output model.
+    # ── Hitung proporsi ──────────────────────────────────────────
     props = []
     for t, s, e in zip(trend_v, season_v, exog_v):
         denom = abs(t) + abs(s) + abs(e)
