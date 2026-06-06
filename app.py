@@ -1838,75 +1838,23 @@ def page_prediksi():
             unsafe_allow_html=True
         )
 
-        decomp_csv = st.file_uploader(
-            "Upload CSV Dekomposisi (opsional)",
-            type=["csv"],
-            key="decomp_csv_upload",
-            label_visibility="collapsed"
-        )
+        DECOMP_FILE = 'dekomposisi_penelitian.csv'
 
-        if decomp_csv is not None:
-            try:
-                df_decomp_csv = pd.read_csv(decomp_csv)
-                df_decomp_csv["ds"] = pd.to_datetime(df_decomp_csv["ds"])
-                # Cek kolom minimal
-                req_cols = {"trend_orig","seasonality_orig","exogenous_orig"}
-                if req_cols.issubset(set(df_decomp_csv.columns)):
-                    # Filter hanya periode prediksi masa depan jika ada
-                    # Atau tampilkan semua
-                    future_ds = [pd.to_datetime(d) for d in future_dates]
-                    df_fut = df_decomp_csv[
-                        df_decomp_csv["ds"].isin(future_ds)
-                    ] if len(df_decomp_csv[
-                        df_decomp_csv["ds"].isin(future_ds)]) > 0                     else df_decomp_csv.tail(6)
-
-                    decomp_from_csv = {
-                        "trend":       df_fut["trend_orig"].values,
-                        "seasonality": df_fut["seasonality_orig"].values,
-                        "exogenous":   df_fut["exogenous_orig"].values,
-                        "total":       df_fut["NBEATSx_orig"].values
-                                       if "NBEATSx_orig" in df_fut.columns
-                                       else pred_vals,
-                        "success":     True,
-                    }
-                    csv_dates = df_fut["ds"].values
-                    st.success(
-                        f"✅ File dekomposisi berhasil dimuat — "
-                        f"{len(df_fut)} periode"
-                    )
-                    render_decomp_tab(
-                        decomp_from_csv, csv_dates,
-                        label="Data dari File Penelitian"
-                    )
-                else:
-                    missing = req_cols - set(df_decomp_csv.columns)
-                    st.error(
-                        f"❌ Kolom tidak lengkap: **{', '.join(missing)}**"
-                    )
-                    decomp_csv = None
-            except Exception as e:
-                st.error(f"❌ Gagal membaca file: {e}")
-                decomp_csv = None
-
-        if decomp_csv is None:
-            st.markdown(
-                """<div class="warning-box">
-                    Menampilkan estimasi dekomposisi berdasarkan output
-                    per blok model. Hasil mungkin berbeda dari kode penelitian
-                    karena kode penelitian menggunakan model Trend-only dan
-                    Seasonality-only yang dilatih secara terpisah.
-                </div>""",
-                unsafe_allow_html=True
-            )
-            with st.spinner("Menghitung estimasi dekomposisi…"):
-                decomp_result = decompose_forecast(
-                    nf, df_scaled, fut_dummy, scaler_y
-                )
-            render_decomp_tab(
-                decomp_result, future_dates,
-                label=f"Estimasi — 6 Bulan ke Depan ({data_src})"
-            )
-
+        if os.path.exists(DECOMP_FILE):
+            # Load otomatis dari file yang sudah ada di repo
+            decomp_research = pd.read_csv(DECOMP_FILE)
+            decomp_research['ds'] = pd.to_datetime(decomp_research['ds'])
+            st.markdown("""
+            <div class='success-box' style='font-size:.82rem;'>
+                ✅ Data dekomposisi dari penelitian berhasil dimuat otomatis.
+            </div>""", unsafe_allow_html=True)
+        else:
+            decomp_research = None
+            st.markdown("""
+            <div class='warn-box' style='font-size:.82rem;'>
+                ⚠️ File dekomposisi_penelitian.csv tidak ditemukan di repo.
+            </div>""", unsafe_allow_html=True)
+                    
     with tab3:
         st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
                     unsafe_allow_html=True)
