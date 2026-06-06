@@ -607,19 +607,19 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     Dekomposisi prediksi N-BEATSx menjadi komponen Trend, Seasonality,
     dan Eksogen.
 
-    Metodologi mengikuti kode penelitian:
-    1. Hook PyTorch menangkap forecast per blok dalam ruang scaled.
-    2. Blok 0-2 dijumlahkan → trend_scaled.
-    3. Blok 3-5 dijumlahkan → season_scaled.
-    4. exog_scaled = total_scaled - trend_scaled - season_scaled.
-    5. Masing-masing komponen di-inverse_transform secara INDEPENDEN,
-       identik dengan: scaler_y.inverse_transform([[komponen_scaled]]).
-       Pendekatan ini menghasilkan setiap komponen dalam skala asli
-       yang masing-masing mengandung offset mean scaler, sehingga
-       jumlah ketiga komponen > total prediksi — konsisten dengan
-       hasil kode penelitian.
-    6. Proporsi dihitung dari:
-       pct_X = |X_orig| / (|trend_orig|+|season_orig|+|exog_orig|) × 100
+    Pendekatan mengikuti kode penelitian secara struktural:
+    - trend_scaled   = jumlah forecast blok 0-2 (stack Trend)
+    - season_scaled  = jumlah forecast blok 3-5 (stack Seasonality)
+    - exog_scaled    = total_scaled - trend_scaled - season_scaled
+    - Setiap komponen di-inverse_transform secara independen,
+      identik dengan cara kode penelitian:
+        scaler_y.inverse_transform(df[[col]])
+    - Proporsi: pct_X = |X| / (|T|+|S|+|E|) * 100
+
+    Catatan: Hasil mendekati (bukan identik dengan) kode penelitian
+    karena kode penelitian menggunakan model trend-only dan
+    seasonality-only yang dilatih terpisah, sedangkan di sini
+    menggunakan block output dari model gabungan.
     """
     import torch
 
@@ -627,13 +627,17 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         model = nf.models[0]
         model.eval()
 
-        # ── Langkah 1: Tangkap forecast per blok via hook ────────
+        # ── Tangkap forecast per blok via hook ────────────────────
         block_fc = []
 
         def _hook(module, inp, out):
             _, fc = out
-            arr = fc.detach().cpu().squeeze().numpy()
-            block_fc.append(np.atleast_1d(arr.flatten()))
+            # fc shape: (batch, h, 1) atau (batch, h)
+            arr = fc.detach().cpu().numpy()
+            # Ambil batch pertama, flatten
+            arr = arr[0] if arr.ndim == 3 else arr
+            arr = arr.flatten()[:model.h]
+            block_fc.append(arr.astype(float))
 
         hooks = [blk.register_forward_hook(_hook)
                  for blk in model.blocks]
@@ -650,30 +654,31 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         n_trend  = min(3, n_blk)
         n_season = min(3, n_blk - n_trend)
 
-        # Seragamkan panjang tiap blok → (h_out,)
+        # Pastikan semua blok panjang h_out
         blks = []
         for fc in block_fc:
             fc = np.array(fc, dtype=float).flatten()
-            fc = fc[:h_out] if len(fc) >= h_out else                  np.pad(fc, (0, h_out - len(fc)))
+            if len(fc) < h_out:
+                fc = np.pad(fc, (0, h_out - len(fc)))
+            else:
+                fc = fc[:h_out]
             blks.append(fc)
 
-        # ── Langkah 2: Jumlahkan per stack (scaled) ──────────────
-        trend_s  = np.sum([blks[i] for i in range(n_trend)],
-                          axis=0)  # (h_out,)
+        # Jumlahkan per stack
+        trend_s  = np.sum([blks[i] for i in range(n_trend)], axis=0)
         season_s = np.sum(
             [blks[i] for i in range(n_trend, n_trend + n_season)],
-            axis=0)  # (h_out,)
+            axis=0)
         total_s  = forecast_df[["NBEATSx"]].values.flatten()
         exog_s   = total_s - trend_s - season_s
 
-        # ── Langkah 3: Inverse transform per komponen (KUNCI) ────
+        # ── Inverse transform per komponen secara independen ──────
         # Identik dengan kode penelitian:
-        #   scaler_y.inverse_transform(df[[col]])
-        # Setiap komponen dikonversi independen sehingga masing-masing
-        # mengandung offset mean — ini adalah perilaku yang diharapkan.
+        # decomp_df[f"{col}_orig"] = scaler_y.inverse_transform(decomp_df[[col]])
         def inv(arr_1d):
             return scaler_y.inverse_transform(
-                arr_1d.reshape(-1, 1)).flatten()
+                np.array(arr_1d, dtype=float).reshape(-1, 1)
+            ).flatten()
 
         trend_orig  = inv(trend_s)
         season_orig = inv(season_s)
@@ -1819,25 +1824,88 @@ def page_prediksi():
             "<div class='section-header'>Dekomposisi Komponen Prediksi</div>",
             unsafe_allow_html=True
         )
+
+        # ── Opsi 1: Upload file dekomposisi dari kode penelitian ──
         st.markdown(
             """<div class="info-box">
-                Dekomposisi membagi prediksi N-BEATSx menjadi tiga komponen:
-                <b style="color:#68D391;">Trend</b> (blok 0–2),
-                <b style="color:#F6AD55;">Seasonality</b> (blok 3–5), dan
-                <b style="color:#63B3ED;">Eksogen</b> (selisih total minus trend minus seasonality).
-                Komponen eksogen mencerminkan kontribusi variabel BI Rate,
-                harga minyak dunia, kurs USD/IDR, dan lag inflasi.
+                <b>Cara terbaik:</b> Unggah file CSV hasil dekomposisi dari
+                kode penelitian (kolom: <code>ds, trend_orig, seasonality_orig,
+                exogenous_orig, NBEATSx_orig</code>) untuk memperoleh hasil
+                yang identik dengan analisis penelitian.<br><br>
+                Jika tidak diunggah, sistem akan menggunakan estimasi
+                berdasarkan output per blok model.
             </div>""",
             unsafe_allow_html=True
         )
-        with st.spinner("Menghitung dekomposisi komponen…"):
-            decomp_result = decompose_forecast(
-                nf, df_scaled, fut_dummy, scaler_y
-            )
-        render_decomp_tab(
-            decomp_result, future_dates,
-            label=f"6 Bulan ke Depan ({data_src})"
+
+        decomp_csv = st.file_uploader(
+            "Upload CSV Dekomposisi (opsional)",
+            type=["csv"],
+            key="decomp_csv_upload",
+            label_visibility="collapsed"
         )
+
+        if decomp_csv is not None:
+            try:
+                df_decomp_csv = pd.read_csv(decomp_csv)
+                df_decomp_csv["ds"] = pd.to_datetime(df_decomp_csv["ds"])
+                # Cek kolom minimal
+                req_cols = {"trend_orig","seasonality_orig","exogenous_orig"}
+                if req_cols.issubset(set(df_decomp_csv.columns)):
+                    # Filter hanya periode prediksi masa depan jika ada
+                    # Atau tampilkan semua
+                    future_ds = [pd.to_datetime(d) for d in future_dates]
+                    df_fut = df_decomp_csv[
+                        df_decomp_csv["ds"].isin(future_ds)
+                    ] if len(df_decomp_csv[
+                        df_decomp_csv["ds"].isin(future_ds)]) > 0                     else df_decomp_csv.tail(6)
+
+                    decomp_from_csv = {
+                        "trend":       df_fut["trend_orig"].values,
+                        "seasonality": df_fut["seasonality_orig"].values,
+                        "exogenous":   df_fut["exogenous_orig"].values,
+                        "total":       df_fut["NBEATSx_orig"].values
+                                       if "NBEATSx_orig" in df_fut.columns
+                                       else pred_vals,
+                        "success":     True,
+                    }
+                    csv_dates = df_fut["ds"].values
+                    st.success(
+                        f"✅ File dekomposisi berhasil dimuat — "
+                        f"{len(df_fut)} periode"
+                    )
+                    render_decomp_tab(
+                        decomp_from_csv, csv_dates,
+                        label="Data dari File Penelitian"
+                    )
+                else:
+                    missing = req_cols - set(df_decomp_csv.columns)
+                    st.error(
+                        f"❌ Kolom tidak lengkap: **{', '.join(missing)}**"
+                    )
+                    decomp_csv = None
+            except Exception as e:
+                st.error(f"❌ Gagal membaca file: {e}")
+                decomp_csv = None
+
+        if decomp_csv is None:
+            st.markdown(
+                """<div class="warning-box">
+                    Menampilkan estimasi dekomposisi berdasarkan output
+                    per blok model. Hasil mungkin berbeda dari kode penelitian
+                    karena kode penelitian menggunakan model Trend-only dan
+                    Seasonality-only yang dilatih secara terpisah.
+                </div>""",
+                unsafe_allow_html=True
+            )
+            with st.spinner("Menghitung estimasi dekomposisi…"):
+                decomp_result = decompose_forecast(
+                    nf, df_scaled, fut_dummy, scaler_y
+                )
+            render_decomp_tab(
+                decomp_result, future_dates,
+                label=f"Estimasi — 6 Bulan ke Depan ({data_src})"
+            )
 
     with tab3:
         st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
