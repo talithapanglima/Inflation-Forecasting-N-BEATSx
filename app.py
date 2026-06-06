@@ -178,7 +178,6 @@ st.markdown("""
 
 # ── Load Model & Config ───────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
-@st.cache_resource(show_spinner=False)
 def load_artifacts():
     from neuralforecast import NeuralForecast
     import torch
@@ -275,12 +274,12 @@ def normalize_columns(raw):
 
 
 # ── Session State Init ────────────────────────────────────────────
-if 'page'           not in st.session_state: st.session_state.page          = 'home'
-if 'uploaded_df'    not in st.session_state: st.session_state.uploaded_df   = None
-if 'upload_status'  not in st.session_state: st.session_state.upload_status = None
-# Cache hasil prediksi page_prediksi — invalidate otomatis saat data berubah
-if 'pred_cache'      not in st.session_state: st.session_state.pred_cache     = None
-if 'pred_data_hash'  not in st.session_state: st.session_state.pred_data_hash = None
+if 'page' not in st.session_state:
+    st.session_state.page = 'home'
+if 'uploaded_df' not in st.session_state:
+    st.session_state.uploaded_df = None
+if 'upload_status' not in st.session_state:
+    st.session_state.upload_status = None
 
 
 # ── Sidebar Navigation ────────────────────────────────────────────
@@ -972,9 +971,6 @@ def page_upload():
                     raw = raw.sort_values("ds").reset_index(drop=True)
                     st.session_state.uploaded_df    = raw
                     st.session_state.upload_status  = "ok"
-                    # Invalidate cache prediksi — data baru, prediksi harus diulang
-                    st.session_state.pred_cache      = None
-                    st.session_state.pred_data_hash  = None
                     st.success(
                         f"✅ Data berhasil diunggah — "
                         f"{len(raw)} baris · "
@@ -991,7 +987,7 @@ def page_upload():
                 ["ds","y","BI Rate","Harga Minyak Dunia","Kurs USD/IDR"]
                 if c in df_show.columns]
             st.dataframe(
-                df_show[show_cols].head(5).style.format({
+                df_show[show_cols].head (5).style.format({
                     "y": "{:.4f}", "BI Rate": "{:.4f}",
                     "Harga Minyak Dunia": "{:.2f}", "Kurs USD/IDR": "{:.0f}",
                 }),
@@ -1011,9 +1007,6 @@ def page_upload():
                          use_container_width=True):
                 st.session_state.uploaded_df   = None
                 st.session_state.upload_status = None
-                # Invalidate cache prediksi saat data dihapus
-                st.session_state.pred_cache     = None
-                st.session_state.pred_data_hash = None
                 st.rerun()
 
     with c_fmt:
@@ -1624,87 +1617,46 @@ def page_prediksi():
         st.error(f"❌ Gagal memuat model: {e}")
         return
 
-    # ── Tentukan sumber data & buat hash untuk cache invalidation ──
-    _is_default_pred  = st.session_state.uploaded_df is None
+    _is_default_pred = st.session_state.uploaded_df is None
     use_data_raw_pred = (st.session_state.uploaded_df
                          if not _is_default_pred
                          else full_data_raw)
-    data_src = "Upload" if not _is_default_pred else "Data Bawaan Model"
+    data_src   = "Upload" if not _is_default_pred else "Data Bawaan Model"
 
-    # Hash berdasarkan: sumber data + tanggal terakhir + jumlah baris
-    # Jika data berubah → hash berubah → prediksi dijalankan ulang
-    _last_ds  = str(pd.to_datetime(use_data_raw_pred['ds'].max()))
-    _n_rows   = len(use_data_raw_pred)
-    _src_key  = "upload" if not _is_default_pred else "default"
-    _cur_hash = f"{_src_key}_{_last_ds}_{_n_rows}"
-
-    # Tampilkan banner sumber data
-    banner_color = "#1A365D" if not _is_default_pred else "#2D2400"
-    banner_icon  = "📤"      if not _is_default_pred else "📦"
-    period_start = pd.to_datetime(use_data_raw_pred['ds'].min()).strftime('%b %Y')
-    period_end   = pd.to_datetime(use_data_raw_pred['ds'].max()).strftime('%b %Y')
     st.markdown(f"""
-    <div style='background:{banner_color};border:1px solid #2D3748;
-                border-radius:10px;padding:.7rem 1rem;margin-bottom:1rem;
-                font-size:.85rem;color:#A0AEC0;'>
-        {banner_icon} Sumber data: <b style='color:#E8EAF0;'>{data_src}</b>
-        &nbsp;·&nbsp; {_n_rows} observasi
-        &nbsp;·&nbsp; {period_start} – {period_end}
+    <div class='info-box'>
+        📌 Sumber data: <b>{data_src}</b> ·
+        {len(use_data_raw_pred)} observasi
     </div>""", unsafe_allow_html=True)
 
-    # ── Jalankan prediksi hanya jika hash berubah (data berbeda) ───
-    if st.session_state.pred_data_hash != _cur_hash or        st.session_state.pred_cache is None:
+    try:
+        if not _is_default_pred:
+            # Upload: build features dari raw lalu scale
+            df_feat = build_features(
+                use_data_raw_pred[['ds', 'y', 'BI Rate',
+                                   'Harga Minyak Dunia', 'Kurs USD/IDR']].copy(),
+                config)
+            num_cols  = config['num_cols']
+            df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
+        else:
+            # Bawaan: full_data_scaled sudah siap
+            df_scaled = full_data_scaled.copy()
+            df_feat   = full_data_raw.copy()
 
-        with st.spinner("⏳ Menjalankan prediksi..."):
-            try:
-                if not _is_default_pred:
-                    # Data upload: build features dari raw lalu scale
-                    df_feat  = build_features(
-                        use_data_raw_pred[['ds','y','BI Rate',
-                                           'Harga Minyak Dunia',
-                                           'Kurs USD/IDR']].copy(), config)
-                    num_cols = config['num_cols']
-                    df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
-                else:
-                    # Data bawaan: full_data_scaled sudah siap pakai
-                    df_scaled = full_data_scaled.copy()
-                    df_feat   = full_data_raw.copy()
+        last_date = pd.to_datetime(df_feat['ds'].max())
+        fut_dummy = make_future_dummy(last_date, config['h'], config)
 
-                last_date  = pd.to_datetime(df_feat['ds'].max())
-                fut_dummy  = make_future_dummy(last_date, config['h'], config)
-                forecast   = nf.predict(df=df_scaled, futr_df=fut_dummy)
-                _pred_vals   = scaler_y.inverse_transform(
-                    forecast[['NBEATSx']]).flatten()
-                _future_dates = forecast['ds'].values
-                _hist_y  = df_feat['y'].values
-                _hist_ds = pd.to_datetime(df_feat['ds'].values)
-
-                # Simpan ke session state
-                st.session_state.pred_cache = {
-                    'pred_vals'   : _pred_vals,
-                    'future_dates': _future_dates,
-                    'hist_y'      : _hist_y,
-                    'hist_ds'     : _hist_ds,
-                    'last_date'   : last_date,
-                    'data_src'    : data_src,
-                }
-                st.session_state.pred_data_hash = _cur_hash
-
-            except Exception as e:
-                import traceback
-                st.error(f"❌ Error prediksi: {e}")
-                with st.expander("Detail error"):
-                    st.code(traceback.format_exc())
-                return
-
-    # ── Ambil hasil dari cache ──────────────────────────────────────
-    _cache       = st.session_state.pred_cache
-    pred_vals    = _cache['pred_vals']
-    future_dates = _cache['future_dates']
-    hist_y       = _cache['hist_y']
-    hist_ds      = _cache['hist_ds']
-    last_date    = _cache['last_date']
-    data_ok      = True
+        forecast    = nf.predict(df=df_scaled, futr_df=fut_dummy)
+        pred_vals   = scaler_y.inverse_transform(
+            forecast[['NBEATSx']]).flatten()
+        future_dates = forecast['ds'].values
+        # hist_y dari raw data (sudah dalam skala asli)
+        hist_y  = df_feat['y'].values
+        hist_ds = pd.to_datetime(df_feat['ds'].values)
+        data_ok = True
+    except Exception as e:
+        st.error(f"❌ Error prediksi: {e}")
+        data_ok = False
 
     if not data_ok:
         return
@@ -1799,7 +1751,7 @@ def page_prediksi():
         st.pyplot(fig)
         plt.close()
 
-        if _cache['data_src'] == "Data Bawaan Model":
+        if data_src == "Data Bawaan Model":
             st.markdown("""
             <div class='info-box'>
                 ℹ️ Menggunakan data historis bawaan model.
@@ -1884,7 +1836,7 @@ def page_prediksi():
             )
         render_decomp_tab(
             decomp_result, future_dates,
-            label=f"6 Bulan ke Depan ({_cache['data_src']})"
+            label=f"6 Bulan ke Depan ({data_src})"
         )
 
     with tab3:
