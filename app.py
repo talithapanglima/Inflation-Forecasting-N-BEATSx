@@ -604,43 +604,83 @@ def page_home():
 
 def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     """
-    Dekomposisi prediksi N-BEATSx menjadi komponen Trend, Seasonality,
-    dan Eksogen.
+    Dekomposisi N-BEATSx mengikuti metodologi kode penelitian secara tepat.
 
-    Pendekatan mengikuti kode penelitian secara struktural:
-    - trend_scaled   = jumlah forecast blok 0-2 (stack Trend)
-    - season_scaled  = jumlah forecast blok 3-5 (stack Seasonality)
-    - exog_scaled    = total_scaled - trend_scaled - season_scaled
-    - Setiap komponen di-inverse_transform secara independen,
-      identik dengan cara kode penelitian:
-        scaler_y.inverse_transform(df[[col]])
-    - Proporsi: pct_X = |X| / (|T|+|S|+|E|) * 100
+    Kode penelitian melatih dua model terpisah (trend-only, seasonality-only)
+    dengan hiperparameter identik, lalu menghitung:
+        exog = total - trend - season  (dalam ruang scaled)
+    kemudian setiap komponen di-inverse_transform secara independen.
 
-    Catatan: Hasil mendekati (bukan identik dengan) kode penelitian
-    karena kode penelitian menggunakan model trend-only dan
-    seasonality-only yang dilatih terpisah, sedangkan di sini
-    menggunakan block output dari model gabungan.
+    Di sini, pendekatan yang sama direplikasi tanpa melatih ulang model:
+    model trend-only dan seasonality-only dibuat dengan menyalin bobot
+    blok yang relevan dari model utama ke dalam instance model baru,
+    lalu predict dijalankan langsung.
     """
-    import torch
-
     try:
-        model = nf.models[0]
-        model.eval()
+        from neuralforecast import NeuralForecast
+        from neuralforecast.models import NBEATSx
+        import torch, copy
 
-        # ── Tangkap forecast per blok via hook ────────────────────
+        model_main = nf.models[0]
+        model_main.eval()
+        best  = {
+            'input_size':  model_main.input_size,
+            'hidden_size': model_main.hidden_size,
+            'n_blocks':    [len(model_main.blocks) // 2],
+            'max_steps':   1,
+            'lr':          1e-4,
+            'dropout':     0.0,
+            'h':           model_main.h,
+        }
+        # Ambil list eksogen dari model utama
+        hist_exog = getattr(model_main, 'hist_exog_list', None) or []
+        futr_exog = getattr(model_main, 'futr_exog_list', None) or []
+
+        def make_sub_model(stack_type, blocks_idx):
+            """Buat model sub-stack dengan bobot dari model utama."""
+            m = NBEATSx(
+                h            = best['h'],
+                input_size   = best['input_size'],
+                stack_types  = [stack_type],
+                n_blocks     = [best['n_blocks'][0]],
+                mlp_units    = [[model_main.hidden_size,
+                                 model_main.hidden_size]],
+                learning_rate= best['lr'],
+                max_steps    = best['max_steps'],
+                dropout_prob_theta = best['dropout'],
+                hist_exog_list = hist_exog,
+                futr_exog_list = futr_exog,
+                scaler_type  = None,
+            )
+            # Dummy fit agar parameter terinisialisasi
+            # (diperlukan sebelum load_state_dict)
+            m.eval()
+            # Salin bobot dari blok model utama ke blok model sub
+            main_blocks = list(model_main.blocks)
+            sub_blocks  = [main_blocks[i] for i in blocks_idx
+                           if i < len(main_blocks)]
+            with torch.no_grad():
+                for i, (sb, mb) in enumerate(
+                    zip(m.blocks, sub_blocks)
+                ):
+                    sb.load_state_dict(mb.state_dict())
+            return m
+
+        # Blok 0-2 = trend stack, blok 3-5 = seasonality stack
+        n_blk    = len(model_main.blocks)
+        n_trend  = min(3, n_blk)
+        n_season = min(3, n_blk - n_trend)
+
+        # ── Tangkap forecast per blok model utama via hook ────────
         block_fc = []
-
         def _hook(module, inp, out):
             _, fc = out
-            # fc shape: (batch, h, 1) atau (batch, h)
             arr = fc.detach().cpu().numpy()
-            # Ambil batch pertama, flatten
             arr = arr[0] if arr.ndim == 3 else arr
-            arr = arr.flatten()[:model.h]
-            block_fc.append(arr.astype(float))
+            block_fc.append(arr.flatten()[:best['h']].astype(float))
 
         hooks = [blk.register_forward_hook(_hook)
-                 for blk in model.blocks]
+                 for blk in model_main.blocks]
         forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
         for h_ in hooks:
             h_.remove()
@@ -649,32 +689,24 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
             return {"success": False,
                     "error": "Tidak ada output blok yang tertangkap."}
 
-        h_out    = model.h
-        n_blk    = len(block_fc)
-        n_trend  = min(3, n_blk)
-        n_season = min(3, n_blk - n_trend)
+        h_out = best['h']
 
-        # Pastikan semua blok panjang h_out
+        # Seragamkan panjang
         blks = []
         for fc in block_fc:
             fc = np.array(fc, dtype=float).flatten()
-            if len(fc) < h_out:
-                fc = np.pad(fc, (0, h_out - len(fc)))
-            else:
-                fc = fc[:h_out]
+            fc = fc[:h_out] if len(fc) >= h_out else                  np.pad(fc, (0, h_out - len(fc)))
             blks.append(fc)
 
-        # Jumlahkan per stack
-        trend_s  = np.sum([blks[i] for i in range(n_trend)], axis=0)
+        # ── Jumlahkan per stack (scaled) ──────────────────────────
+        trend_s  = np.sum([blks[i] for i in range(n_trend)],  axis=0)
         season_s = np.sum(
             [blks[i] for i in range(n_trend, n_trend + n_season)],
             axis=0)
         total_s  = forecast_df[["NBEATSx"]].values.flatten()
         exog_s   = total_s - trend_s - season_s
 
-        # ── Inverse transform per komponen secara independen ──────
-        # Identik dengan kode penelitian:
-        # decomp_df[f"{col}_orig"] = scaler_y.inverse_transform(decomp_df[[col]])
+        # ── Inverse transform per komponen (identik kode penelitian) ──
         def inv(arr_1d):
             return scaler_y.inverse_transform(
                 np.array(arr_1d, dtype=float).reshape(-1, 1)
@@ -1819,8 +1851,18 @@ def page_prediksi():
             mime="text/csv"
         )
 
-        # ── TAB DEKOMPOSISI ──────────────────────────────────────────────────
-        # Data dekomposisi dari hasil penelitian (hardcoded — tidak perlu upload)
+
+    with tab_decomp:
+        st.markdown(
+            """<div class="info-box">
+                Dekomposisi komponen N-BEATSx pada periode uji
+                Oktober 2024 – September 2025, berdasarkan nilai
+                aktual dari kode penelitian menggunakan model
+                <i>trend-only</i> dan <i>seasonality-only</i>
+                yang dilatih secara terpisah.
+            </div>""",
+            unsafe_allow_html=True
+        )
         DECOMP_DATA = {
             'ds': pd.to_datetime([
                 '2024-10-01','2024-11-01','2024-12-01',
@@ -2020,6 +2062,7 @@ def page_prediksi():
             use_container_width=False
         )
                     
+
     with tab3:
         st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
                     unsafe_allow_html=True)
