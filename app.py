@@ -193,7 +193,8 @@ def load_artifacts():
     with open('saved_model/scaler_exog.pkl', 'rb') as f: scaler_exog = pickle.load(f)
     with open('saved_model/best_params.pkl', 'rb') as f: best        = pickle.load(f)
     with open('saved_model/config.json',     'r')  as f: config      = json.load(f)
-
+    with open('saved_model/nf_trend.pkl', 'rb') as f: nf_trend = pickle.load(f)
+    with open('saved_model/nf_season.pkl', 'rb') as f: nf_season = pickle.load(f)
     # full_data adalah data yang SUDAH di-scale (normalized)
     # digunakan langsung sebagai input model tanpa di-scale lagi
     full_data_scaled = pd.read_parquet('saved_model/full_data.parquet')
@@ -208,7 +209,7 @@ def load_artifacts():
     full_data_raw[NUM_COLS] = scaler_exog.inverse_transform(
         full_data_scaled[NUM_COLS])
 
-    return nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw
+    return nf, nf_trend, nf_season, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw
 
 
 # ── Helper Functions ──────────────────────────────────────────────
@@ -606,7 +607,7 @@ def page_home():
 
 
 
-def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
+def decompose_forecast(nf, nf_trend, nf_season, df_scaled, fut_dummy, scaler_y):
     """
     Dekomposisi N-BEATSx mengikuti metodologi kode penelitian secara tepat.
 
@@ -621,113 +622,45 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     lalu predict dijalankan langsung.
     """
     try:
-        from neuralforecast import NeuralForecast
-        from neuralforecast.models import NBEATSx
-        import torch, copy
 
-        model_main = nf.models[0]
-        model_main.eval()
-        best  = {
-            'input_size':  model_main.input_size,
-            'hidden_size': getattr(model_main,"hidden_size",512),
-            'n_blocks':    [len(model_main.blocks) // 2],
-            'max_steps':   1,
-            'lr':          1e-4,
-            'dropout':     0.0,
-            'h':           model_main.h,
-        }
-        # Ambil list eksogen dari model utama
-        hist_exog = getattr(model_main, 'hist_exog_list', None) or []
-        futr_exog = getattr(model_main, 'futr_exog_list', None) or []
+        main_fc = nf.predict(
+            df=df_scaled,
+            futr_df=fut_df
+        )
 
-        def make_sub_model(stack_type, blocks_idx):
-            """Buat model sub-stack dengan bobot dari model utama."""
-            hidden_size  = getattr(model_main,"hidden_size", 512)
-            m = NBEATSx(
-                h            = best['h'],
-                input_size   = best['input_size'],
-                stack_types  = [stack_type],
-                n_blocks     = [best['n_blocks'][0]],
-                hidden_size  = hidden_size,
-                mlp_units    = [[hidden_size, hidden_size]],
-                learning_rate= best['lr'],
-                max_steps    = best['max_steps'],
-                dropout_prob_theta = best['dropout'],
-                hist_exog_list = hist_exog,
-                futr_exog_list = futr_exog,
-                scaler_type  = None,
-            )
-            # Dummy fit agar parameter terinisialisasi
-            # (diperlukan sebelum load_state_dict)
-            m.eval()
-            # Salin bobot dari blok model utama ke blok model sub
-            main_blocks = list(model_main.blocks)
-            sub_blocks  = [main_blocks[i] for i in blocks_idx
-                           if i < len(main_blocks)]
-            with torch.no_grad():
-                for i, (sb, mb) in enumerate(
-                    zip(m.blocks, sub_blocks)
-                ):
-                    sb.load_state_dict(mb.state_dict())
-            return m
+        trend_fc = nf_trend.predict(
+            df=df_scaled,
+            futr_df=fut_df
+        )
 
-        # Blok 0-2 = trend stack, blok 3-5 = seasonality stack
-        n_blk    = len(model_main.blocks)
-        n_trend  = min(3, n_blk)
-        n_season = min(3, n_blk - n_trend)
+        season_fc = nf_season.predict(
+            df=df_scaled,
+            futr_df=fut_df
+        )
 
-        # ── Tangkap forecast per blok model utama via hook ────────
-        block_fc = []
-        def _hook(module, inp, out):
-            _, fc = out
-            arr = fc.detach().cpu().numpy()
-            arr = arr[0] if arr.ndim == 3 else arr
-            block_fc.append(arr.flatten()[:best['h']].astype(float))
+        total_scaled = main_fc["NBEATSx"].values.flatten()
 
-        hooks = [blk.register_forward_hook(_hook)
-                 for blk in model_main.blocks]
-        forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
-        for h_ in hooks:
-            h_.remove()
+        trend_scaled = trend_fc["NBEATSx"].values.flatten()
 
-        if not block_fc:
-            return {"success": False,
-                    "error": "Tidak ada output blok yang tertangkap."}
+        season_scaled = season_fc["NBEATSx"].values.flatten()
 
-        h_out = best['h']
+        exog_scaled = (
+            total_scaled
+            - trend_scaled
+            - season_scaled
+        )
 
-        # Seragamkan panjang
-        blks = []
-        for fc in block_fc:
-            fc = np.array(fc, dtype=float).flatten()
-            fc = fc[:h_out] if len(fc) >= h_out else                  np.pad(fc, (0, h_out - len(fc)))
-            blks.append(fc)
-
-        # ── Jumlahkan per stack (scaled) ──────────────────────────
-        trend_s  = np.sum([blks[i] for i in range(n_trend)],  axis=0)
-        season_s = np.sum(
-            [blks[i] for i in range(n_trend, n_trend + n_season)],
-            axis=0)
-        total_s  = forecast_df[["NBEATSx"]].values.flatten()
-        exog_s   = total_s - trend_s - season_s
-
-        # ── Inverse transform per komponen (identik kode penelitian) ──
-        def inv(arr_1d):
+        def inv(arr):
             return scaler_y.inverse_transform(
-                np.array(arr_1d, dtype=float).reshape(-1, 1)
+                arr.reshape(-1, 1)
             ).flatten()
 
-        trend_orig  = inv(trend_s)
-        season_orig = inv(season_s)
-        exog_orig   = inv(exog_s)
-        total_orig  = inv(total_s)
-
         return {
-            "trend":       trend_orig,
-            "seasonality": season_orig,
-            "exogenous":   exog_orig,
-            "total":       total_orig,
-            "success":     True,
+            "trend": inv(trend_scaled),
+            "seasonality": inv(season_scaled),
+            "exogenous": inv(exog_scaled),
+            "total": inv(total_scaled),
+            "success": True
         }
 
     except Exception as e:
@@ -736,6 +669,8 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
             "success": False,
             "error": str(e) + "\n" + traceback.format_exc()
         }
+        # Ambil list eksogen dari model utama
+
 
 
 def render_decomp_tab(decomp, future_dates, label="Prediksi"):
@@ -1139,7 +1074,7 @@ def page_upload():
     )
 
     try:
-        nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
+        nf, nf_trend, nf_season, scaler_y, scaler_exog, best, config,full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
@@ -1835,7 +1770,7 @@ def page_prediksi():
     </div>""", unsafe_allow_html=True)
 
     try:
-        nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
+        nf, nf_trend, nf_season, scaler_y, scaler_exog, best, config,full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
