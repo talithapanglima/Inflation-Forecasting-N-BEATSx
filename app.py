@@ -280,6 +280,10 @@ if 'uploaded_df' not in st.session_state:
     st.session_state.uploaded_df = None
 if 'upload_status' not in st.session_state:
     st.session_state.upload_status = None
+if 'upload_df_scaled' not in st.session_state:
+    st.session_state.upload_df_scaled = None
+if 'upload_df_feat' not in st.session_state:
+    st.session_state.upload_df_feat = None
 
 
 # ── Sidebar Navigation ────────────────────────────────────────────
@@ -989,7 +993,8 @@ def page_upload():
         uploaded = st.file_uploader(
             "Pilih file CSV atau Excel",
             type=["csv", "xlsx"],
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="file_uploader_main"
         )
 
         if uploaded is not None:
@@ -1008,12 +1013,28 @@ def page_upload():
                     raw = raw.sort_values("ds").reset_index(drop=True)
                     st.session_state.uploaded_df    = raw
                     st.session_state.upload_status  = "ok"
-                    st.success(
-                        f"✅ Data berhasil diunggah — "
-                        f"{len(raw)} baris · "
-                        f"{raw['ds'].min().strftime('%b %Y')} – "
-                        f"{raw['ds'].max().strftime('%b %Y')}"
-                    )
+                    # ── Proses sekarang: build features + scale → simpan ke session_state
+                    # Ini memastikan df_scaled selalu konsisten dengan data yang diunggah
+                    try:
+                        _nf, _sy, _se, _bp, _cfg, _fds, _fdr = load_artifacts()
+                        _df_feat = build_features(
+                            raw[["ds","y","BI Rate","Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
+                            _cfg)
+                        _df_scaled = scale_df(_df_feat, _sy, _se, _cfg["num_cols"])
+                        st.session_state.upload_df_scaled = _df_scaled
+                        st.session_state.upload_df_feat   = _df_feat
+                        st.session_state.upload_last_date = pd.to_datetime(_df_feat["ds"].max())
+                        st.success(
+                            f"✅ Data berhasil diunggah & diproses — "
+                            f"{len(raw)} baris · "
+                            f"{raw['ds'].min().strftime('%b %Y')} – "
+                            f"{raw['ds'].max().strftime('%b %Y')}"
+                        )
+                    except Exception as _e:
+                        st.session_state.upload_df_scaled = None
+                        st.session_state.upload_df_feat   = None
+                        st.session_state.upload_last_date = None
+                        st.error(f"⚠️ Data tersimpan tapi gagal diproses: {_e}. Periksa format kolom.")
             except Exception as e:
                 st.error(f"❌ Gagal membaca file: {e}")
                 st.session_state.uploaded_df = None
@@ -1042,8 +1063,11 @@ def page_upload():
                           f"{df_show['y'].iloc[-1]*100:.2f}%")
             if st.button("🗑️  Hapus & gunakan data bawaan",
                          use_container_width=True):
-                st.session_state.uploaded_df   = None
-                st.session_state.upload_status = None
+                st.session_state.uploaded_df      = None
+                st.session_state.upload_status    = None
+                st.session_state.upload_df_scaled = None
+                st.session_state.upload_df_feat   = None
+                st.session_state.upload_last_date = None
                 st.rerun()
 
     with c_fmt:
@@ -1827,15 +1851,25 @@ def page_prediksi():
         {pd.to_datetime(use_raw["ds"].max()).strftime("%b %Y")}
     </div>""", unsafe_allow_html=True)
 
-    # ── Build features & predict ──────────────────────────────────
+    # ── Ambil df_scaled & df_feat dari session_state (sudah diproses saat upload) ──
     try:
         if not _default:
-            df_feat = build_features(
-                use_raw[["ds","y","BI Rate",
-                          "Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
-                config)
-            df_scaled = scale_df(df_feat, scaler_y, scaler_exog,
-                                 config["num_cols"])
+            # Gunakan hasil processing yang disimpan saat upload
+            df_scaled = st.session_state.upload_df_scaled
+            df_feat   = st.session_state.upload_df_feat
+
+            # Fallback: jika session_state hilang (misal setelah refresh browser),
+            # rebuild dari uploaded_df
+            if df_scaled is None or df_feat is None:
+                df_feat = build_features(
+                    use_raw[["ds","y","BI Rate",
+                              "Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
+                    config)
+                df_scaled = scale_df(df_feat, scaler_y, scaler_exog,
+                                     config["num_cols"])
+                # Simpan kembali ke session_state
+                st.session_state.upload_df_scaled = df_scaled
+                st.session_state.upload_df_feat   = df_feat
         else:
             df_scaled = full_data_scaled.copy()
             df_feat   = full_data_raw.copy()
@@ -1846,18 +1880,22 @@ def page_prediksi():
         pred_vals    = scaler_y.inverse_transform(
             forecast[["NBEATSx"]]).flatten()
         future_dates = forecast["ds"].values
+
         # hist_y untuk display (skala asli / raw)
         if not _default:
-            # df_scaled berasal dari scale_df → perlu di-inverse
+            # df_scaled berasal dari scale_df → inverse untuk display
             hist_y = scaler_y.inverse_transform(
                 df_scaled[["y"]].values).flatten()
         else:
-            # full_data_raw SUDAH raw (sudah di-inverse saat load_artifacts)
+            # full_data_raw SUDAH raw
             hist_y = df_feat["y"].values.flatten()
+
         hist_ds  = pd.to_datetime(df_feat["ds"].values)
         data_ok  = True
     except Exception as e:
+        import traceback
         st.error(f"❌ Error prediksi: {e}")
+        st.code(traceback.format_exc())
         data_ok = False
 
     if not data_ok:
@@ -2314,7 +2352,7 @@ def page_prediksi():
                 for bar_, val_ in zip(bars_u, du_e):
                     ax3u.text(
                         bar_.get_x()+bar_.get_width()/2,
-                        bar_.get_height() + abs(float(np.max(np.abs(du_e))))*0.02,
+                        bar_.get_height()+abs(du_e.max())*0.02,
                         f"{val_:.4f}", ha="center", va="bottom",
                         fontsize=7, color="#A0AEC0", fontfamily="monospace")
                 ax3u.set_xticks(xpos_u)
@@ -2405,103 +2443,44 @@ def page_prediksi():
                         <div class="metric-value">{val}</div>
                         <div class="metric-sub">{desc}</div>
                     </div>""", unsafe_allow_html=True)
-
-            st.markdown("""
-            <div class='warning-box' style='margin-top:.75rem;'>
-                ⚠️ SMAPE yang relatif tinggi dipengaruhi oleh anomali deflasi
-                Februari 2025 (inflasi = −0.09%). Pada kondisi normal,
-                SMAPE model berkisar 6–25%.
-            </div>""", unsafe_allow_html=True)
-
         else:
-            # Data upload: tidak ada nilai aktual masa depan untuk dievaluasi.
-            # Tampilkan statistik deskriptif prediksi + statistik data upload.
+            # Hitung metrik dari data upload
             st.markdown(
-                "<div class='section-header'>Statistik Prediksi — Data Upload</div>",
+                "<div class='section-header'>Performa Prediksi pada Data Upload</div>",
                 unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class='info-box' style='margin-bottom:.75rem;'>
-                📌 Prediksi dihasilkan dari data upload
-                ({hist_ds[0].strftime('%b %Y')} – {hist_ds[-1].strftime('%b %Y')},
-                {len(hist_y)} observasi). Nilai aktual untuk periode prediksi
-                ({pd.to_datetime(future_dates[0]).strftime('%b %Y')} –
-                {pd.to_datetime(future_dates[-1]).strftime('%b %Y')})
-                belum tersedia, sehingga metrik MAE/RMSE/SMAPE tidak dapat dihitung
-                secara langsung.<br><br>
-                Metrik di bawah merupakan statistik deskriptif hasil prediksi.
-            </div>""", unsafe_allow_html=True)
-
-            # Statistik deskriptif prediksi
-            pv_pct = pred_vals * 100
-            ma1u, ma2u, ma3u, ma4u = st.columns(4)
-            for col_, (lbl, val) in zip(
-                [ma1u, ma2u, ma3u, ma4u],
-                [("Rata-rata Prediksi", f"{np.mean(pv_pct):.4f}%"),
-                 ("Minimum",            f"{np.min(pv_pct):.4f}%"),
-                 ("Maksimum",           f"{np.max(pv_pct):.4f}%"),
-                 ("Std Dev",            f"{np.std(pv_pct):.4f}%")]
-            ):
-                with col_:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-label">{lbl}</div>
-                        <div class="metric-value" style="font-size:1.15rem;">{val}</div>
-                    </div>""", unsafe_allow_html=True)
-
-            # Grafik perubahan bulanan prediksi
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='section-header'>Perubahan Prediksi Antar-Bulan</div>",
-                unsafe_allow_html=True)
-            set_dark_style()
-            diff_p = np.diff(pv_pct)
-            fig_diff, ax_diff = plt.subplots(figsize=(10, 3))
-            colors_diff = ["#68D391" if v >= 0 else "#FC8181" for v in diff_p]
-            bars_diff = ax_diff.bar(range(len(diff_p)), diff_p,
-                                    color=colors_diff, alpha=0.85)
-            for bar_, val_ in zip(bars_diff, diff_p):
-                ax_diff.text(
-                    bar_.get_x() + bar_.get_width()/2,
-                    bar_.get_height() + (0.003 if val_ >= 0 else -0.006),
-                    f"{val_:+.3f}%",
-                    ha="center", va="bottom" if val_ >= 0 else "top",
-                    fontsize=8, color="#E8EAF0", fontfamily="monospace")
-            ax_diff.set_xticks(range(len(diff_p)))
-            ax_diff.set_xticklabels(
-                [pd.to_datetime(d).strftime("%b %Y") for d in future_dates[1:]],
-                rotation=30, ha="right", fontsize=8)
-            ax_diff.axhline(0, color="#4A5568", lw=0.8, ls="--")
-            ax_diff.set_ylabel("Δ Inflasi (%)", fontsize=9)
-            ax_diff.yaxis.set_major_formatter(
-                plt.FuncFormatter(lambda x, _: f"{x:+.3f}%"))
-            ax_diff.set_title("Perubahan Prediksi Inflasi Antar-Bulan",
-                              fontsize=10, pad=8,
-                              color="#E8EAF0", fontfamily="monospace")
-            ax_diff.grid(True, alpha=0.4, axis="y")
-            plt.tight_layout()
-            st.pyplot(fig_diff)
-            plt.close()
-
-            # Statistik data historis upload
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='section-header'>Statistik Data Historis Upload</div>",
-                unsafe_allow_html=True)
-            hy_pct = hist_y * 100
-            sh1, sh2, sh3, sh4 = st.columns(4)
-            for col_, (lbl, val) in zip(
-                [sh1, sh2, sh3, sh4],
-                [("Rata-rata Historis", f"{np.mean(hy_pct):.4f}%"),
-                 ("Min Historis",       f"{np.min(hy_pct):.4f}%"),
-                 ("Max Historis",       f"{np.max(hy_pct):.4f}%"),
-                 ("Std Dev Historis",   f"{np.std(hy_pct):.4f}%")]
-            ):
-                with col_:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-label">{lbl}</div>
-                        <div class="metric-value" style="font-size:1.15rem;">{val}</div>
-                    </div>""", unsafe_allow_html=True)
+            # Bandingkan pred_vals dengan hist_y terakhir (overlap jika ada)
+            last_actuals = hist_y[-config["h"]:]
+            last_dates_a = hist_ds[-config["h"]:]
+            if len(last_actuals) == config["h"]:
+                mae_u  = np.mean(np.abs(last_actuals - pred_vals))
+                rmse_u = np.sqrt(np.mean((last_actuals - pred_vals)**2))
+                denom  = (np.abs(last_actuals) + np.abs(pred_vals))
+                denom  = np.where(denom < 1e-6, 1.0, denom)
+                smape_u = np.mean(2*np.abs(last_actuals - pred_vals)/denom)*100
+                ma1u, ma2u, ma3u = st.columns(3)
+                for col_, (lbl, val, desc) in zip(
+                    [ma1u, ma2u, ma3u],
+                    [("MAE",   f"{mae_u:.5f}",  "Mean Absolute Error"),
+                     ("RMSE",  f"{rmse_u:.5f}", "Root Mean Squared Error"),
+                     ("SMAPE", f"{smape_u:.2f}%","Symmetric MAPE")]
+                ):
+                    with col_:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-label">{lbl}</div>
+                            <div class="metric-value">{val}</div>
+                            <div class="metric-sub">{desc}</div>
+                        </div>""", unsafe_allow_html=True)
+                st.markdown(
+                    f"""<div class="info-box" style="margin-top:.75rem;">
+                        Metrik dihitung dari perbandingan prediksi masa depan
+                        terhadap {config["h"]} observasi terakhir data upload
+                        ({last_dates_a[0].strftime("%b %Y")} –
+                        {last_dates_a[-1].strftime("%b %Y")}).
+                    </div>""",
+                    unsafe_allow_html=True)
+            else:
+                st.info("Data terlalu pendek untuk menghitung metrik evaluasi.")
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
