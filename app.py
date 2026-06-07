@@ -629,7 +629,7 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
         model_main.eval()
         best  = {
             'input_size':  model_main.input_size,
-            'hidden_size': model_main.hidden_size,
+            'hidden_size': getattr(model_main,"hidden_size",512),
             'n_blocks':    [len(model_main.blocks) // 2],
             'max_steps':   1,
             'lr':          1e-4,
@@ -642,13 +642,14 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
 
         def make_sub_model(stack_type, blocks_idx):
             """Buat model sub-stack dengan bobot dari model utama."""
+            hidden_size  = getattr(model_main,"hidden_size", 512)
             m = NBEATSx(
                 h            = best['h'],
                 input_size   = best['input_size'],
                 stack_types  = [stack_type],
                 n_blocks     = [best['n_blocks'][0]],
-                mlp_units    = [[model_main.hidden_size,
-                                 model_main.hidden_size]],
+                hidden_size  = hidden_size,
+                mlp_units    = [[hidden_size, hidden_size]],
                 learning_rate= best['lr'],
                 max_steps    = best['max_steps'],
                 dropout_prob_theta = best['dropout'],
@@ -1847,6 +1848,7 @@ def page_prediksi():
     use_custom_forecast = (
         st.session_state.get("custom_pred_vals") is not None
         and st.session_state.get("custom_pred_dates") is not None
+        and st.session_state.get("custom_fut_df") is not None
     )
     st.markdown(f"""
     <div class='info-box'>
@@ -1883,7 +1885,7 @@ def page_prediksi():
 
             pred_vals = st.session_state["custom_pred_vals"]
             future_dates = st.session_state["custom_pred_dates"]
-
+            fut_dummy = st.session_state["custom_fut_df"]
         else:
             last_date = pd.to_datetime(df_feat["ds"].max())
             fut_dummy = make_future_dummy(
@@ -1918,7 +1920,6 @@ def page_prediksi():
             st.success(
                 "Menggunakan hasil prediksi kustom terakhir."
             )
-            st.write("DEBUG:", future_dates)
     except Exception as e:
         import traceback
         st.error(f"❌ Error prediksi: {e}")
