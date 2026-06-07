@@ -1636,550 +1636,6 @@ def page_visualisasi():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# PAGE: PREDIKSI INFLASI
-# ═══════════════════════════════════════════════════════════════════
-def page_prediksi():
-    st.markdown("""
-    <div class='main-header'>
-        <div class='main-title'>📈 Prediksi Inflasi</div>
-        <div class='main-subtitle'>
-            Hasil prediksi 6 bulan ke depan — Model N-BEATSx + Bayesian Optimization
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    try:
-        nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
-    except Exception as e:
-        st.error(f"❌ Gagal memuat model: {e}")
-        return
-
-    _is_default_pred = st.session_state.uploaded_df is None
-    use_data_raw_pred = (st.session_state.uploaded_df
-                         if not _is_default_pred
-                         else full_data_raw)
-    data_src   = "Upload" if not _is_default_pred else "Data Bawaan Model"
-
-    st.markdown(f"""
-    <div class='info-box'>
-        📌 Sumber data: <b>{data_src}</b> ·
-        {len(use_data_raw_pred)} observasi
-    </div>""", unsafe_allow_html=True)
-
-    try:
-        if not _is_default_pred:
-            # Upload: build features dari raw lalu scale
-            df_feat = build_features(
-                use_data_raw_pred[['ds', 'y', 'BI Rate',
-                                   'Harga Minyak Dunia', 'Kurs USD/IDR']].copy(),
-                config)
-            num_cols  = config['num_cols']
-            df_scaled = scale_df(df_feat, scaler_y, scaler_exog, num_cols)
-        else:
-            # Bawaan: full_data_scaled sudah siap
-            df_scaled = full_data_scaled.copy()
-            df_feat   = full_data_raw.copy()
-
-        last_date = pd.to_datetime(df_feat['ds'].max())
-        fut_dummy = make_future_dummy(last_date, config['h'], config)
-
-        forecast    = nf.predict(df=df_scaled, futr_df=fut_dummy)
-        pred_vals   = scaler_y.inverse_transform(
-            forecast[['NBEATSx']]).flatten()
-        future_dates = forecast['ds'].values
-        # hist_y dari raw data (sudah dalam skala asli)
-        hist_y  = df_feat['y'].values
-        hist_ds = pd.to_datetime(df_feat['ds'].values)
-        data_ok = True
-    except Exception as e:
-        st.error(f"❌ Error prediksi: {e}")
-        data_ok = False
-
-    if not data_ok:
-        return
-
-    # Metrik ringkasan
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-label'>Prediksi Bulan Pertama</div>
-            <div class='metric-value'>{pred_vals[0]*100:.2f}%</div>
-            <div class='metric-sub'>
-                {pd.to_datetime(future_dates[0]).strftime('%b %Y')}
-            </div>
-        </div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-label'>Rata-rata 6 Bulan</div>
-            <div class='metric-value'>{np.mean(pred_vals)*100:.2f}%</div>
-            <div class='metric-sub'>Mean prediksi</div>
-        </div>""", unsafe_allow_html=True)
-    with c3:
-        trend_dir = "↑" if pred_vals[-1] > pred_vals[0] else "↓"
-        trend_col = "#68D391" if pred_vals[-1] > pred_vals[0] else "#FC8181"
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-label'>Arah Tren</div>
-            <div class='metric-value' style='color:{trend_col};'>
-                {trend_dir}
-            </div>
-            <div class='metric-sub'>
-                {pred_vals[0]*100:.2f}% → {pred_vals[-1]*100:.2f}%
-            </div>
-        </div>""", unsafe_allow_html=True)
-    with c4:
-        st.markdown("""
-        <div class='metric-card'>
-            <div class='metric-label'>Horizon Prediksi</div>
-            <div class='metric-value'>6</div>
-            <div class='metric-sub'>Bulan ke depan</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    tab1, tab2, tab_decomp, tab3, tab4 = st.tabs([
-        "📊 Grafik Prediksi", "📋 Tabel Hasil",
-        "🧩 Dekomposisi", "🔍 Analisis Model", "ℹ️ Panduan"
-    ])
-
-    with tab1:
-        set_dark_style()
-        fig, ax = plt.subplots(figsize=(12, 4.5))
-        n_show    = 24
-        hist_show = hist_y[-n_show:]
-        ds_show   = hist_ds[-n_show:]
-
-        ax.plot(ds_show, hist_show,
-                color='#63B3ED', linewidth=1.8,
-                marker='o', markersize=3, label='Aktual', zorder=3)
-        ax.plot([ds_show[-1], future_dates[0]],
-                [hist_show[-1], pred_vals[0]],
-                color='#F6AD55', linewidth=1.5,
-                linestyle='--', alpha=0.6)
-        ax.plot(future_dates, pred_vals,
-                color='#F6AD55', linewidth=2,
-                marker='s', markersize=5,
-                label='Prediksi N-BEATSx', zorder=4)
-        ax.fill_between(future_dates,
-                        pred_vals * 0.85, pred_vals * 1.15,
-                        alpha=0.12, color='#F6AD55')
-        for d, v in zip(future_dates, pred_vals):
-            ax.annotate(f'{v*100:.2f}%', xy=(d, v),
-                        xytext=(0, 12), textcoords='offset points',
-                        fontsize=7.5, color='#F6AD55',
-                        ha='center', fontfamily='monospace')
-        ax.axvline(x=pd.to_datetime(last_date),
-                   color='#4A5568', linewidth=1, linestyle=':', alpha=0.8)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha='right')
-        ax.set_ylabel('Inflasi (%)')
-        ax.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x, _: f'{x*100:.1f}%'))
-        ax.legend(fontsize=9, framealpha=0.3,
-                  facecolor='#1A202C', edgecolor='#2D3748')
-        ax.grid(True, alpha=0.4)
-        ax.set_title('Prediksi Inflasi Indonesia — N-BEATSx',
-                     fontsize=11, pad=12, color='#E8EAF0',
-                     fontfamily='monospace')
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-
-        if data_src == "Data Bawaan Model":
-            st.markdown("""
-            <div class='info-box'>
-                ℹ️ Menggunakan data historis bawaan model.
-                Upload file di halaman <b>Upload Data</b> untuk
-                prediksi dengan data terbaru Anda.
-            </div>""", unsafe_allow_html=True)
-
-    with tab2:
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            st.markdown("<div class='section-header'>Prediksi 6 Bulan ke Depan</div>",
-                        unsafe_allow_html=True)
-            rows = ""
-            for i, (d, v) in enumerate(zip(future_dates, pred_vals)):
-                pct   = v * 100
-                color = "#68D391" if pct < 3 else \
-                        "#F6AD55" if pct < 5 else "#FC8181"
-                cat   = 'Rendah ✓' if pct < 3 else \
-                        'Moderat' if pct < 5 else 'Tinggi ⚠'
-                rows += f"""
-                <tr>
-                    <td>{i+1}</td>
-                    <td>{pd.to_datetime(d).strftime('%B %Y')}</td>
-                    <td style='color:{color};font-weight:600;'>{pct:.4f}%</td>
-                    <td style='color:{color};'>{cat}</td>
-                </tr>"""
-            st.markdown(f"""
-            <table class='pred-table'>
-                <tr><th>#</th><th>Periode</th>
-                    <th>Prediksi</th><th>Kategori</th></tr>
-                {rows}
-            </table>""", unsafe_allow_html=True)
-
-        with col_b:
-            st.markdown("<div class='section-header'>Data Historis Terakhir (12 Obs)</div>",
-                        unsafe_allow_html=True)
-            rows_h = ""
-            for d, v in zip(hist_ds[-12:], hist_y[-12:]):
-                rows_h += f"""
-                <tr>
-                    <td>{pd.to_datetime(d).strftime('%b %Y')}</td>
-                    <td>{v*100:.4f}%</td>
-                </tr>"""
-            st.markdown(f"""
-            <table class='pred-table'>
-                <tr><th>Periode</th><th>Inflasi Aktual</th></tr>
-                {rows_h}
-            </table>""", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        dl_df = pd.DataFrame({
-            'Periode': [pd.to_datetime(d).strftime('%Y-%m')
-                        for d in future_dates],
-            'Prediksi_Inflasi': [f"{v*100:.4f}" for v in pred_vals]
-        })
-        st.download_button(
-            "⬇️ Download Hasil Prediksi (CSV)",
-            dl_df.to_csv(index=False).encode('utf-8'),
-            file_name="prediksi_inflasi.csv",
-            mime="text/csv"
-        )
-
-
-    with tab_decomp:
-        st.markdown(
-            """<div class="info-box">
-                Dekomposisi komponen N-BEATSx pada periode uji
-                Oktober 2024 – September 2025, berdasarkan nilai
-                aktual dari kode penelitian menggunakan model
-                <i>trend-only</i> dan <i>seasonality-only</i>
-                yang dilatih secara terpisah.
-            </div>""",
-            unsafe_allow_html=True
-        )
-        DECOMP_DATA = {
-            'ds': pd.to_datetime([
-                '2024-10-01','2024-11-01','2024-12-01',
-                '2025-01-01','2025-02-01','2025-03-01',
-                '2025-04-01','2025-05-01','2025-06-01',
-                '2025-07-01','2025-08-01','2025-09-01'
-            ]),
-            'y_orig': [
-                0.0171, 0.0155, 0.0157,
-                0.0076,-0.0009, 0.0103,
-                0.0195, 0.0160, 0.0187,
-                0.0237, 0.0231, 0.0265
-            ],
-            'NBEATSx_orig': [
-                0.019326, 0.020110, 0.019025,
-                0.019436, 0.020475, 0.021181,
-                0.013474, 0.017076, 0.021259,
-                0.023222, 0.029173, 0.028163
-            ],
-            'trend_orig': [
-                0.018970, 0.017318, 0.016566,
-                0.016713, 0.017760, 0.019706,
-                0.012251, 0.020248, 0.026155,
-                0.029972, 0.031698, 0.031335
-            ],
-            'seasonality_orig': [
-                0.018408, 0.017196, 0.015796,
-                0.016647, 0.019020, 0.023279,
-                0.012942, 0.017895, 0.026751,
-                0.027229, 0.033164, 0.034063
-            ],
-            'exogenous_orig': [
-                0.067489, 0.071137, 0.072205,
-                0.071617, 0.069236, 0.063737,
-                0.073822, 0.064474, 0.053894,
-                0.051563, 0.049852, 0.048306
-            ]
-        }
-        decomp_df = pd.DataFrame(DECOMP_DATA)
-
-        # Hitung proporsi
-        total = decomp_df[['trend_orig','seasonality_orig','exogenous_orig']].sum(axis=1)
-        decomp_df['trend_pct']       = decomp_df['trend_orig']       / total * 100
-        decomp_df['seasonality_pct'] = decomp_df['seasonality_orig'] / total * 100
-        decomp_df['exogenous_pct']   = decomp_df['exogenous_orig']   / total * 100
-
-        # ── Banner ───────────────────────────────────────────────────────────
-        st.markdown("""
-        <div class='info-box'>
-            🔬 Dekomposisi komponen N-BEATSx dari hasil penelitian
-            (data uji: Oktober 2024 – September 2025).
-            Nilai ini merupakan output langsung dari model interpretable
-            N-BEATSx dengan <i>trend stack</i> (basis polinomial) dan
-            <i>seasonality stack</i> (basis Fourier).
-        </div>""", unsafe_allow_html=True)
-
-        # ── Metrik ringkasan ─────────────────────────────────────────────────
-        st.markdown("<div class='sec-hdr'>Kontribusi Rata-rata per Komponen</div>",
-                    unsafe_allow_html=True)
-        m1, m2, m3 = st.columns(3)
-        for col, (lbl, val, clr, desc) in zip([m1,m2,m3],[
-            ("Tren",     f"{decomp_df['trend_pct'].mean():.2f}%",
-            "#68D391", "Basis polinomial — tren jangka panjang"),
-            ("Musiman",  f"{decomp_df['seasonality_pct'].mean():.2f}%",
-            "#F6AD55", "Basis Fourier — pola musiman & kalender"),
-            ("Eksogen",  f"{decomp_df['exogenous_pct'].mean():.2f}%",
-            "#63B3ED", "Makro + lag — BI Rate, Minyak, Kurs"),
-        ]):
-            with col:
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-label'>{lbl}</div>
-                    <div class='metric-value' style='color:{clr};'>{val}</div>
-                    <div class='metric-sub'>{desc}</div>
-                </div>""", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ── Plot 4 panel ─────────────────────────────────────────────────────
-        set_dark_style()
-        fig, axes = plt.subplots(4, 1, figsize=(11, 14))
-        fig.suptitle('Dekomposisi Komponen N-BEATSx — Test Set (Okt 2024 – Sep 2025)',
-                    fontsize=12, fontweight='bold', y=1.01)
-
-        ds_vals = decomp_df['ds'].values
-
-        # Panel 1: Prediksi vs Aktual
-        ax0 = axes[0]
-        ax0.plot(ds_vals, decomp_df['y_orig']*100,
-                'o-', color='#63B3ED', lw=1.8, ms=5, label='Aktual')
-        ax0.plot(ds_vals, decomp_df['NBEATSx_orig']*100,
-                's--', color='#FC8181', lw=1.8, ms=5, label='Prediksi N-BEATSx')
-        ax0.fill_between(ds_vals,
-                        decomp_df['y_orig']*100,
-                        decomp_df['NBEATSx_orig']*100,
-                        alpha=0.12, color='#FC8181')
-        ax0.set_title('Prediksi vs Aktual — Test Set', fontsize=10, pad=8)
-        ax0.set_ylabel('Inflasi (%)', fontsize=9)
-        ax0.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x,_: f'{x:.1f}%'))
-        ax0.legend(fontsize=9, framealpha=.3,
-                facecolor='#1A202C', edgecolor='#2D3748')
-        ax0.grid(True, alpha=.4)
-
-        # Panel 2: Komponen Trend
-        ax1 = axes[1]
-        ax1.plot(ds_vals, decomp_df['trend_orig'],
-                'o-', color='#68D391', lw=1.8, ms=5, label='Trend')
-        ax1.fill_between(ds_vals, decomp_df['trend_orig'], 0,
-                        alpha=0.15, color='#68D391')
-        ax1.axhline(y=0, color='#4A5568', lw=0.8, ls=':')
-        ax1.set_title('Komponen Trend', fontsize=10, pad=8)
-        ax1.set_ylabel('Kontribusi', fontsize=9)
-        ax1.legend(fontsize=9, framealpha=.3,
-                facecolor='#1A202C', edgecolor='#2D3748')
-        ax1.grid(True, alpha=.4)
-
-        # Panel 3: Komponen Seasonality
-        ax2 = axes[2]
-        ax2.plot(ds_vals, decomp_df['seasonality_orig'],
-                'o-', color='#F6AD55', lw=1.8, ms=5, label='Seasonality')
-        ax2.fill_between(ds_vals, decomp_df['seasonality_orig'], 0,
-                        alpha=0.15, color='#F6AD55')
-        ax2.axhline(y=0, color='#4A5568', lw=0.8, ls=':')
-        ax2.set_title('Komponen Seasonality (Termasuk Efek Kalender)',
-                    fontsize=10, pad=8)
-        ax2.set_ylabel('Kontribusi', fontsize=9)
-        ax2.legend(fontsize=9, framealpha=.3,
-                facecolor='#1A202C', edgecolor='#2D3748')
-        ax2.grid(True, alpha=.4)
-
-        # Panel 4: Komponen Eksogen (bar chart)
-        # Gunakan label string kategorikal agar bar terlihat
-        ax3 = axes[3]
-        bar_labels = [pd.to_datetime(d).strftime('%b %Y') for d in ds_vals]
-        x_pos      = np.arange(len(bar_labels))
-        bars = ax3.bar(
-            x_pos,
-            decomp_df['exogenous_orig'].values,
-            color='#63B3ED', alpha=0.85, width=0.6,
-            label='Eksogen'
-        )
-        for bar, val in zip(bars, decomp_df['exogenous_orig']):
-            ax3.text(
-                bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 0.0008,
-                f'{val:.4f}',
-                ha='center', va='bottom',
-                fontsize=7, color='#A0AEC0', fontfamily='monospace'
-            )
-        ax3.set_xticks(x_pos)
-        ax3.set_xticklabels(bar_labels, rotation=30, ha='right', fontsize=8)
-        ax3.set_title(
-            'Komponen Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag)',
-            fontsize=10, pad=8
-        )
-        ax3.set_ylabel('Kontribusi', fontsize=9)
-        ax3.set_xlabel('Tanggal', fontsize=9)
-        ax3.legend(fontsize=9, framealpha=.3,
-                   facecolor='#1A202C', edgecolor='#2D3748')
-        ax3.grid(True, alpha=.4, axis='y')
-
-        # Format sumbu X 3 panel pertama (bukan ax3 yg sudah pakai string)
-        for ax in axes[:3]:
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
-            plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha='right',
-                     fontsize=8)
-
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-
-        # ── Tabel proporsi per bulan ─────────────────────────────────────────
-        st.markdown("<div class='sec-hdr'>Proporsi Kontribusi per Periode (%)</div>",
-                    unsafe_allow_html=True)
-
-        rows = ""
-        for _, row in decomp_df.iterrows():
-            rows += f"""
-            <tr>
-                <td>{pd.to_datetime(row['ds']).strftime('%b %Y')}</td>
-                <td>{row['trend_pct']:.2f}%</td>
-                <td>{row['seasonality_pct']:.2f}%</td>
-                <td>{row['exogenous_pct']:.2f}%</td>
-                <td style='color:#63B3ED;'>{row['NBEATSx_orig']*100:.4f}%</td>
-                <td style='color:#A0AEC0;'>{row['y_orig']*100:.4f}%</td>
-            </tr>"""
-
-        st.markdown(f"""
-        <table class='pred-table'>
-            <tr>
-                <th>Periode</th>
-                <th>Tren</th>
-                <th>Musiman</th>
-                <th>Eksogen</th>
-                <th>Prediksi</th>
-                <th>Aktual</th>
-            </tr>{rows}
-        </table>""", unsafe_allow_html=True)
-
-        # ── Download ─────────────────────────────────────────────────────────
-        st.markdown("<br>", unsafe_allow_html=True)
-        dl_decomp = decomp_df[['ds','trend_orig','seasonality_orig',
-                                'exogenous_orig','NBEATSx_orig','y_orig',
-                                'trend_pct','seasonality_pct','exogenous_pct']]
-        dl_decomp['ds'] = dl_decomp['ds'].dt.strftime('%Y-%m-%d')
-        st.download_button(
-            "⬇️ Download Tabel Dekomposisi (CSV)",
-            dl_decomp.to_csv(index=False).encode('utf-8'),
-            file_name="dekomposisi_nbeatsx.csv",
-            mime="text/csv",
-            use_container_width=False
-        )
-                    
-
-    with tab3:
-        st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
-                    unsafe_allow_html=True)
-        m1, m2, m3 = st.columns(3)
-        metrics = [
-            ("MAE",   "0.00601", "Mean Absolute Error"),
-            ("RMSE",  "0.00834", "Root Mean Squared Error"),
-            ("SMAPE", "41.76%",  "Symmetric MAPE"),
-        ]
-        for col, (label, val, desc) in zip([m1, m2, m3], metrics):
-            with col:
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-label'>{label}</div>
-                    <div class='metric-value'>{val}</div>
-                    <div class='metric-sub'>{desc}</div>
-                </div>""", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='section-header'>Perbandingan Model</div>",
-                    unsafe_allow_html=True)
-        comp_data = {
-            'Model':  ['N-BEATSx + BO ★',
-                       'Prophet', 'SARIMAX', 'N-BEATS'],
-            'MAE':    ['0.00601', '0.00487', '0.00717', '0.01039'],
-            'RMSE':   ['0.00834', '0.00592', '0.00905', '0.01223'],
-            'SMAPE':  ['41.76%',  '43.96%',  '46.40%',  '62.34%'],
-        }
-        rows_c = ""
-        for i in range(len(comp_data['Model'])):
-            bold = "font-weight:700;color:#63B3ED;" \
-                   if '★' in comp_data['Model'][i] else ""
-            rows_c += f"""
-            <tr>
-                <td style='{bold}'>{comp_data['Model'][i]}</td>
-                <td style='{bold}'>{comp_data['MAE'][i]}</td>
-                <td style='{bold}'>{comp_data['RMSE'][i]}</td>
-                <td style='{bold}'>{comp_data['SMAPE'][i]}</td>
-            </tr>"""
-        st.markdown(f"""
-        <table class='pred-table'>
-            <tr><th>Model</th><th>MAE</th><th>RMSE</th><th>SMAPE</th></tr>
-            {rows_c}
-        </table>""", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class='warning-box'>
-            ⚠️ SMAPE yang relatif tinggi pada seluruh model dipengaruhi oleh
-            anomali deflasi Februari 2025 (inflasi = −0.09%).
-            Pada kondisi inflasi normal, SMAPE model berkisar 6–25%.
-        </div>""", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='section-header'>Hasil Uji Asumsi Residual</div>",
-                    unsafe_allow_html=True)
-        r1, r2 = st.columns(2)
-        residual_tests = [
-            ("Rata-rata Residual", "ē = −0.004927", "Mendekati nol", True),
-            ("Shapiro-Wilk",       "W=0.9152, p=0.2489", "Normal", True),
-            ("Ljung-Box (lag=6)",  "Q=5.2282, p=0.5149", "Tidak autokorelasi", True),
-            ("Breusch-Pagan",      "LM=8.8344, p=0.2648", "Homoskedastis", True),
-        ]
-        for i, (test, stat, result, passed) in enumerate(residual_tests):
-            col = r1 if i % 2 == 0 else r2
-            icon  = "✅" if passed else "❌"
-            color = "#68D391" if passed else "#FC8181"
-            with col:
-                st.markdown(f"""
-                <div class='metric-card' style='text-align:left;
-                     margin-bottom:0.8rem;'>
-                    <div class='metric-label'>{test}</div>
-                    <div style='font-family:Space Mono,monospace;
-                         font-size:0.82rem;color:#A0AEC0;
-                         margin:0.3rem 0;'>{stat}</div>
-                    <div style='color:{color};font-size:0.8rem;
-                         font-weight:600;'>{icon} {result}</div>
-                </div>""", unsafe_allow_html=True)
-
-    with tab4:
-        st.markdown("<div class='section-header'>Panduan Penggunaan</div>",
-                    unsafe_allow_html=True)
-        st.markdown("""
-        <div class='info-box'>
-            <b>Format File yang Diterima:</b> CSV (.csv) atau Excel (.xlsx)<br><br>
-            <b>Kolom yang Diperlukan:</b><br>
-            • <code>Date / ds / Tanggal</code> — Tanggal (YYYY-MM-DD)<br>
-            • <code>Inflasi Umum / y / Inflasi</code> — Nilai inflasi desimal<br>
-            • <code>BI Rate</code> — Suku bunga kebijakan (desimal)<br>
-            • <code>Harga Minyak Dunia</code> — USD per barel<br>
-            • <code>Kurs USD/IDR</code> — Nilai tukar rupiah<br><br>
-            <b>Frekuensi:</b> Bulanan · <b>Minimum:</b> 36 baris
-        </div>
-        <div class='warning-box' style='margin-top:1rem;'>
-            <b>Catatan:</b> Prediksi bersifat indikatif berdasarkan pola
-            historis. Model tidak dapat mengantisipasi kejadian ekstrem
-            yang tidak terwakili dalam data pelatihan.
-        </div>""", unsafe_allow_html=True)
-
-
-# ═══════════════════════════════════════════════════════════════════
 # PAGE: ABOUT US
 # ═══════════════════════════════════════════════════════════════════
 def page_about():
@@ -2340,6 +1796,693 @@ def page_about():
         oleh otoritas terkait.
     </div>""", unsafe_allow_html=True)
 
+
+
+
+def page_prediksi():
+    st.markdown("""
+    <div class='main-header'>
+        <div class='main-title'>📈 Prediksi Inflasi</div>
+        <div class='main-subtitle'>
+            Hasil prediksi 6 bulan ke depan — Model N-BEATSx + Bayesian Optimization
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    try:
+        nf, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
+    except Exception as e:
+        st.error(f"❌ Gagal memuat model: {e}")
+        return
+
+    # ── Tentukan sumber data ──────────────────────────────────────
+    _default = st.session_state.uploaded_df is None
+    use_raw  = full_data_raw if _default else st.session_state.uploaded_df
+    src_lbl  = "Data Bawaan Model" if _default else "Data Upload"
+
+    st.markdown(f"""
+    <div class='info-box'>
+        📌 Sumber data: <b>{src_lbl}</b> ·
+        {len(use_raw)} observasi ·
+        {pd.to_datetime(use_raw["ds"].min()).strftime("%b %Y")} –
+        {pd.to_datetime(use_raw["ds"].max()).strftime("%b %Y")}
+    </div>""", unsafe_allow_html=True)
+
+    # ── Build features & predict ──────────────────────────────────
+    try:
+        if not _default:
+            df_feat = build_features(
+                use_raw[["ds","y","BI Rate",
+                          "Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
+                config)
+            df_scaled = scale_df(df_feat, scaler_y, scaler_exog,
+                                 config["num_cols"])
+        else:
+            df_scaled = full_data_scaled.copy()
+            df_feat   = full_data_raw.copy()
+
+        last_date    = pd.to_datetime(df_feat["ds"].max())
+        fut_dummy    = make_future_dummy(last_date, config["h"], config)
+        forecast     = nf.predict(df=df_scaled, futr_df=fut_dummy)
+        pred_vals    = scaler_y.inverse_transform(
+            forecast[["NBEATSx"]]).flatten()
+        future_dates = forecast["ds"].values
+        hist_y       = df_feat["y"].values
+        hist_ds      = pd.to_datetime(df_feat["ds"].values)
+        data_ok      = True
+    except Exception as e:
+        st.error(f"❌ Error prediksi: {e}")
+        data_ok = False
+
+    if not data_ok:
+        return
+
+    # ── KPI cards ─────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    td = "↑" if pred_vals[-1] > pred_vals[0] else "↓"
+    tc = "#68D391" if pred_vals[-1] > pred_vals[0] else "#FC8181"
+    for col, (lbl, val, sub) in zip(
+        [c1, c2, c3, c4],
+        [("Prediksi Bulan Pertama",
+          f"{pred_vals[0]*100:.2f}%",
+          pd.to_datetime(future_dates[0]).strftime("%b %Y")),
+         ("Rata-rata 6 Bulan",
+          f"{np.mean(pred_vals)*100:.2f}%", "Mean prediksi"),
+         ("Arah Tren",
+          f"<span style='color:{tc};'>{td}</span>",
+          f"{pred_vals[0]*100:.2f}% → {pred_vals[-1]*100:.2f}%"),
+         ("Horizon Prediksi", "6", "Bulan ke depan")]
+    ):
+        with col:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">{lbl}</div>
+                <div class="metric-value">{val}</div>
+                <div class="metric-sub">{sub}</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    tab1, tab2, tab_decomp, tab3, tab4 = st.tabs([
+        "📊 Grafik Prediksi", "📋 Tabel Hasil",
+        "🧩 Dekomposisi", "🔍 Analisis Model", "ℹ️ Panduan"
+    ])
+
+    # ════════════════════════════════════════════════════════
+    # TAB 1 — GRAFIK PREDIKSI
+    # ════════════════════════════════════════════════════════
+    with tab1:
+        set_dark_style()
+        fig, ax = plt.subplots(figsize=(12, 4.5))
+        n_show  = min(36, len(hist_y))
+        ax.plot(hist_ds[-n_show:], hist_y[-n_show:] * 100,
+                color="#63B3ED", linewidth=1.8,
+                marker="o", markersize=3, label="Aktual", zorder=3)
+        ax.plot([hist_ds[-1], pd.to_datetime(future_dates[0])],
+                [hist_y[-1]*100, pred_vals[0]*100],
+                color="#F6AD55", linewidth=1.5, linestyle="--", alpha=0.6)
+        ax.plot(future_dates, pred_vals * 100,
+                color="#F6AD55", linewidth=2,
+                marker="s", markersize=5,
+                label="Prediksi N-BEATSx", zorder=4)
+        ax.fill_between(future_dates,
+                        pred_vals*100*0.85, pred_vals*100*1.15,
+                        alpha=0.1, color="#F6AD55")
+        for d, v in zip(future_dates, pred_vals):
+            ax.annotate(f"{v*100:.2f}%", xy=(d, v*100),
+                        xytext=(0, 12), textcoords="offset points",
+                        fontsize=7.5, color="#F6AD55",
+                        ha="center", fontfamily="monospace")
+        ax.axvline(x=hist_ds[-1], color="#4A5568",
+                   linewidth=1, linestyle=":", alpha=0.8)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right")
+        ax.set_ylabel("Inflasi (%)")
+        ax.yaxis.set_major_formatter(
+            plt.FuncFormatter(lambda x, _: f"{x:.1f}%"))
+        ax.legend(fontsize=9, framealpha=0.3,
+                  facecolor="#1A202C", edgecolor="#2D3748")
+        ax.grid(True, alpha=0.4)
+        ax.set_title(
+            f"Prediksi Inflasi Indonesia — N-BEATSx ({src_lbl})",
+            fontsize=11, pad=12, color="#E8EAF0", fontfamily="monospace")
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    # ════════════════════════════════════════════════════════
+    # TAB 2 — TABEL HASIL
+    # ════════════════════════════════════════════════════════
+    with tab2:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown(
+                "<div class='section-header'>Prediksi 6 Bulan ke Depan</div>",
+                unsafe_allow_html=True)
+            rows_p = ""
+            for i, (d, v) in enumerate(zip(future_dates, pred_vals)):
+                pct  = v * 100
+                clr  = "#68D391" if pct < 3 else                        "#F6AD55" if pct < 5 else "#FC8181"
+                cat  = "Rendah ✓" if pct < 3 else                        "Moderat"  if pct < 5 else "Tinggi ⚠"
+                rows_p += (
+                    f"<tr><td>{i+1}</td>"
+                    f"<td>{pd.to_datetime(d).strftime('%B %Y')}</td>"
+                    f"<td style='color:{clr};font-weight:600;'>{pct:.4f}%</td>"
+                    f"<td style='color:{clr};'>{cat}</td></tr>"
+                )
+            st.markdown(
+                f"""<table class="pred-table">
+                    <tr><th>#</th><th>Periode</th>
+                    <th>Prediksi</th><th>Kategori</th></tr>
+                    {rows_p}
+                </table>""",
+                unsafe_allow_html=True)
+
+        with col_b:
+            st.markdown(
+                "<div class='section-header'>Data Historis Terakhir (12 Obs)</div>",
+                unsafe_allow_html=True)
+            rows_h = ""
+            for d, v in zip(hist_ds[-12:], hist_y[-12:]):
+                rows_h += (
+                    f"<tr><td>{pd.to_datetime(d).strftime('%b %Y')}</td>"
+                    f"<td>{v*100:.4f}%</td></tr>"
+                )
+            st.markdown(
+                f"""<table class="pred-table">
+                    <tr><th>Periode</th><th>Inflasi Aktual</th></tr>
+                    {rows_h}
+                </table>""",
+                unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        dl_df = pd.DataFrame({
+            "Periode": [pd.to_datetime(d).strftime("%Y-%m")
+                        for d in future_dates],
+            "Prediksi_Inflasi_%": [f"{v*100:.4f}" for v in pred_vals],
+            "Sumber_Data": src_lbl,
+        })
+        st.download_button(
+            "⬇️ Download Hasil Prediksi (CSV)",
+            dl_df.to_csv(index=False).encode("utf-8"),
+            file_name="prediksi_inflasi.csv", mime="text/csv")
+
+    # ════════════════════════════════════════════════════════
+    # TAB 3 — DEKOMPOSISI
+    # ════════════════════════════════════════════════════════
+    with tab_decomp:
+        if _default:
+            # Data bawaan → hardcoded dari kode penelitian
+            st.markdown(
+                """<div class="info-box">
+                    Dekomposisi komponen N-BEATSx periode uji
+                    Oktober 2024 – September 2025, berdasarkan hasil
+                    kode penelitian menggunakan model <i>trend-only</i>
+                    dan <i>seasonality-only</i> yang dilatih terpisah.
+                </div>""",
+                unsafe_allow_html=True)
+
+            DECOMP_DATA = {
+                "ds": pd.to_datetime([
+                    "2024-10-01","2024-11-01","2024-12-01",
+                    "2025-01-01","2025-02-01","2025-03-01",
+                    "2025-04-01","2025-05-01","2025-06-01",
+                    "2025-07-01","2025-08-01","2025-09-01"]),
+                "y_orig": [
+                    0.0171,0.0155,0.0157,0.0076,-0.0009,0.0103,
+                    0.0195,0.0160,0.0187,0.0237,0.0231,0.0265],
+                "NBEATSx_orig": [
+                    0.019326,0.020110,0.019025,0.019436,0.020475,0.021181,
+                    0.013474,0.017076,0.021259,0.023222,0.029173,0.028163],
+                "trend_orig": [
+                    0.018970,0.017318,0.016566,0.016713,0.017760,0.019706,
+                    0.012251,0.020248,0.026155,0.029972,0.031698,0.031335],
+                "seasonality_orig": [
+                    0.018408,0.017196,0.015796,0.016647,0.019020,0.023279,
+                    0.012942,0.017895,0.026751,0.027229,0.033164,0.034063],
+                "exogenous_orig": [
+                    0.067489,0.071137,0.072205,0.071617,0.069236,0.063737,
+                    0.073822,0.064474,0.053894,0.051563,0.049852,0.048306],
+            }
+            decomp_df = pd.DataFrame(DECOMP_DATA)
+            for col_ in ["trend_orig","seasonality_orig","exogenous_orig"]:
+                tot_ = (decomp_df["trend_orig"].abs()
+                        + decomp_df["seasonality_orig"].abs()
+                        + decomp_df["exogenous_orig"].abs())
+                decomp_df[col_.replace("_orig","_pct")] =                     decomp_df[col_].abs() / tot_ * 100
+
+            # Metrik proporsi rata-rata
+            avg_t = decomp_df["trend_pct"].mean()
+            avg_s = decomp_df["seasonality_pct"].mean()
+            avg_e = decomp_df["exogenous_pct"].mean()
+
+            dm1, dm2, dm3 = st.columns(3)
+            for col_, (lbl, val, clr, desc) in zip(
+                [dm1, dm2, dm3],
+                [("Proporsi Tren",    f"{avg_t:.2f}%", "#68D391",
+                  "Stack Trend (Blok 0–2)"),
+                 ("Proporsi Musiman", f"{avg_s:.2f}%", "#F6AD55",
+                  "Stack Seasonality (Blok 3–5)"),
+                 ("Proporsi Eksogen", f"{avg_e:.2f}%", "#63B3ED",
+                  "BI Rate · Minyak · Kurs · Lag")]
+            ):
+                with col_:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">{lbl}</div>
+                        <div class="metric-value" style="color:{clr};">{val}</div>
+                        <div class="metric-sub">{desc}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Grafik 4 panel
+            set_dark_style()
+            fig_d, axes_d = plt.subplots(4, 1, figsize=(11,14))
+            fig_d.suptitle(
+                "Dekomposisi Komponen N-BEATSx — Test Set (Okt 2024 – Sep 2025)",
+                fontsize=11, fontweight="bold", y=1.01)
+            ds_vals = decomp_df["ds"].values
+
+            ax0d = axes_d[0]
+            ax0d.plot(ds_vals, decomp_df["y_orig"]*100,
+                      "o-", color="#63B3ED", lw=1.8, ms=4, label="Aktual")
+            ax0d.plot(ds_vals, decomp_df["NBEATSx_orig"]*100,
+                      "s--", color="#FC8181", lw=1.8, ms=5,
+                      label="Prediksi N-BEATSx")
+            ax0d.fill_between(ds_vals,
+                              decomp_df["y_orig"]*100,
+                              decomp_df["NBEATSx_orig"]*100,
+                              alpha=0.1, color="#FC8181")
+            ax0d.set_title("Prediksi vs Aktual — Test Set",
+                           fontsize=10, pad=8)
+            ax0d.set_ylabel("Inflasi (%)", fontsize=9)
+            ax0d.yaxis.set_major_formatter(
+                plt.FuncFormatter(lambda x, _: f"{x:.3f}%"))
+            ax0d.legend(fontsize=9, framealpha=.3,
+                        facecolor="#1A202C", edgecolor="#2D3748")
+            ax0d.grid(True, alpha=.4)
+
+            for ax_, col_, clr_, title_ in [
+                (axes_d[1], "trend_orig",       "#68D391",
+                 "Komponen Trend"),
+                (axes_d[2], "seasonality_orig", "#F6AD55",
+                 "Komponen Seasonality (Termasuk Efek Kalender)"),
+            ]:
+                ax_.plot(ds_vals, decomp_df[col_],
+                         "o-", color=clr_, lw=1.8, ms=4, label=col_.split("_")[0].title())
+                ax_.fill_between(ds_vals, decomp_df[col_], 0,
+                                 alpha=0.12, color=clr_)
+                ax_.axhline(y=0, color="#4A5568", lw=0.8, ls=":")
+                ax_.set_title(title_, fontsize=10, pad=8)
+                ax_.set_ylabel("Kontribusi", fontsize=9)
+                ax_.legend(fontsize=9, framealpha=.3,
+                           facecolor="#1A202C", edgecolor="#2D3748")
+                ax_.grid(True, alpha=.4)
+
+            # Panel eksogen: bar chart
+            ax3d = axes_d[3]
+            xlbls_d = [pd.Timestamp(d).strftime("%b %Y") for d in ds_vals]
+            xpos_d  = np.arange(len(xlbls_d))
+            bars_d  = ax3d.bar(xpos_d, decomp_df["exogenous_orig"],
+                               color="#63B3ED", alpha=0.85,
+                               width=0.6, label="Eksogen")
+            for bar, val in zip(bars_d, decomp_df["exogenous_orig"]):
+                ax3d.text(
+                    bar.get_x() + bar.get_width()/2,
+                    bar.get_height() + decomp_df["exogenous_orig"].max()*0.02,
+                    f"{val:.4f}", ha="center", va="bottom",
+                    fontsize=7, color="#A0AEC0", fontfamily="monospace")
+            ax3d.set_xticks(xpos_d)
+            ax3d.set_xticklabels(xlbls_d, rotation=30, ha="right", fontsize=8)
+            ax3d.set_title(
+                "Komponen Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag)",
+                fontsize=10, pad=8)
+            ax3d.set_ylabel("Kontribusi", fontsize=9)
+            ax3d.set_xlabel("Tanggal", fontsize=9)
+            ax3d.legend(fontsize=9, framealpha=.3,
+                        facecolor="#1A202C", edgecolor="#2D3748")
+            ax3d.grid(True, alpha=.4, axis="y")
+
+            for ax_ in axes_d[:3]:
+                ax_.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+                ax_.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+                plt.setp(ax_.xaxis.get_majorticklabels(),
+                         rotation=30, ha="right", fontsize=8)
+            plt.tight_layout()
+            st.pyplot(fig_d)
+            plt.close()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Tabel dekomposisi
+            st.markdown(
+                "<div class='section-header'>Tabel Dekomposisi</div>",
+                unsafe_allow_html=True)
+            rows_d = ""
+            for _, row_ in decomp_df.iterrows():
+                rows_d += (
+                    f"<tr>"
+                    f"<td>{row_['ds'].strftime('%B %Y')}</td>"
+                    f"<td style='color:#FC8181;'>{row_['y_orig']*100:.4f}%</td>"
+                    f"<td style='color:#63B3ED;font-weight:600;'>{row_['NBEATSx_orig']*100:.4f}%</td>"
+                    f"<td style='color:#68D391;'>{row_['trend_orig']*100:.4f}%</td>"
+                    f"<td style='color:#F6AD55;'>{row_['seasonality_orig']*100:.4f}%</td>"
+                    f"<td style='color:#63B3ED;'>{row_['exogenous_orig']*100:.4f}%</td>"
+                    f"<td style='color:#718096;font-size:0.78rem;'>"
+                    f"T:{row_['trend_pct']:.1f}% "
+                    f"S:{row_['seasonality_pct']:.1f}% "
+                    f"E:{row_['exogenous_pct']:.1f}%</td>"
+                    f"</tr>"
+                )
+            st.markdown(
+                f"""<table class="pred-table">
+                    <tr>
+                        <th>Periode</th><th>Aktual</th>
+                        <th>Prediksi</th><th>Tren</th>
+                        <th>Musiman</th><th>Eksogen</th>
+                        <th>Proporsi</th>
+                    </tr>{rows_d}
+                </table>""",
+                unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            dl_d = decomp_df[["ds","trend_orig","seasonality_orig",
+                               "exogenous_orig","NBEATSx_orig","y_orig",
+                               "trend_pct","seasonality_pct","exogenous_pct"]].copy()
+            dl_d["ds"] = dl_d["ds"].dt.strftime("%Y-%m-%d")
+            st.download_button(
+                "⬇️ Download Tabel Dekomposisi (CSV)",
+                dl_d.to_csv(index=False).encode("utf-8"),
+                file_name="dekomposisi_nbeatsx.csv", mime="text/csv")
+
+        else:
+            # Data upload → hitung dekomposisi dari data user
+            st.markdown(
+                f"""<div class="info-box">
+                    Dekomposisi komponen N-BEATSx berdasarkan
+                    <b>data yang Anda unggah</b>
+                    ({hist_ds.min().strftime("%b %Y")} –
+                    {hist_ds.max().strftime("%b %Y")},
+                    {len(df_feat)} observasi).
+                    Prediksi masa depan:
+                    {pd.to_datetime(future_dates[0]).strftime("%b %Y")} –
+                    {pd.to_datetime(future_dates[-1]).strftime("%b %Y")}.
+                </div>""",
+                unsafe_allow_html=True)
+            with st.spinner("Menghitung dekomposisi…"):
+                dc = decompose_forecast(nf, df_scaled, fut_dummy, scaler_y)
+
+            if dc["success"]:
+                du_t, du_s, du_e, du_tot = (
+                    dc["trend"], dc["seasonality"],
+                    dc["exogenous"], dc["total"])
+                props_u = []
+                for t_, s_, e_ in zip(du_t, du_s, du_e):
+                    den = abs(t_)+abs(s_)+abs(e_)
+                    den = den if den > 1e-12 else 1.0
+                    props_u.append((abs(t_)/den*100,
+                                    abs(s_)/den*100,
+                                    abs(e_)/den*100))
+                avg_tu = np.mean([p[0] for p in props_u])
+                avg_su = np.mean([p[1] for p in props_u])
+                avg_eu = np.mean([p[2] for p in props_u])
+
+                pu1, pu2, pu3 = st.columns(3)
+                for col_, (lbl, val, clr, desc) in zip(
+                    [pu1, pu2, pu3],
+                    [("Proporsi Tren",    f"{avg_tu:.2f}%", "#68D391",
+                      "Stack Trend (Blok 0–2)"),
+                     ("Proporsi Musiman", f"{avg_su:.2f}%", "#F6AD55",
+                      "Stack Seasonality (Blok 3–5)"),
+                     ("Proporsi Eksogen", f"{avg_eu:.2f}%", "#63B3ED",
+                      "BI Rate · Minyak · Kurs · Lag")]
+                ):
+                    with col_:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-label">{lbl}</div>
+                            <div class="metric-value" style="color:{clr};">{val}</div>
+                            <div class="metric-sub">{desc}</div>
+                        </div>""", unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                set_dark_style()
+                fig_u, axes_u = plt.subplots(4, 1, figsize=(11,14))
+                fig_u.suptitle(
+                    f"Dekomposisi Komponen N-BEATSx — Data Upload "
+                    f"({pd.to_datetime(future_dates[0]).strftime('%b %Y')} – "
+                    f"{pd.to_datetime(future_dates[-1]).strftime('%b %Y')})",
+                    fontsize=11, fontweight="bold", y=1.01)
+
+                fd = [pd.to_datetime(d) for d in future_dates]
+
+                ax0u = axes_u[0]
+                ax0u.plot(hist_ds[-24:], hist_y[-24:]*100,
+                          "o-", color="#63B3ED", lw=1.8, ms=4, label="Aktual")
+                ax0u.plot(fd, du_tot*100,
+                          "s--", color="#FC8181", lw=1.8, ms=5, label="Prediksi")
+                ax0u.axvline(x=hist_ds[-1], color="#4A5568", lw=1, ls=":", alpha=0.8)
+                ax0u.set_title("Aktual vs Prediksi", fontsize=10, pad=8)
+                ax0u.set_ylabel("Inflasi (%)", fontsize=9)
+                ax0u.yaxis.set_major_formatter(
+                    plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
+                ax0u.legend(fontsize=9, framealpha=.3,
+                            facecolor="#1A202C", edgecolor="#2D3748")
+                ax0u.grid(True, alpha=.4)
+
+                for ax_, vals_, clr_, title_ in [
+                    (axes_u[1], du_t, "#68D391", "Komponen Trend"),
+                    (axes_u[2], du_s, "#F6AD55",
+                     "Komponen Seasonality (Termasuk Efek Kalender)"),
+                ]:
+                    ax_.plot(fd, vals_, "o-", color=clr_, lw=1.8, ms=4)
+                    ax_.fill_between(fd, vals_, 0, alpha=0.12, color=clr_)
+                    ax_.axhline(y=0, color="#4A5568", lw=0.8, ls=":")
+                    ax_.set_title(title_, fontsize=10, pad=8)
+                    ax_.set_ylabel("Kontribusi", fontsize=9)
+                    ax_.grid(True, alpha=.4)
+
+                ax3u = axes_u[3]
+                xlbls_u = [pd.to_datetime(d).strftime("%b %Y")
+                           for d in future_dates]
+                xpos_u = np.arange(len(xlbls_u))
+                bars_u = ax3u.bar(xpos_u, du_e,
+                                  color="#63B3ED", alpha=0.85,
+                                  width=0.6, label="Eksogen")
+                for bar_, val_ in zip(bars_u, du_e):
+                    ax3u.text(
+                        bar_.get_x()+bar_.get_width()/2,
+                        bar_.get_height()+abs(du_e.max())*0.02,
+                        f"{val_:.4f}", ha="center", va="bottom",
+                        fontsize=7, color="#A0AEC0", fontfamily="monospace")
+                ax3u.set_xticks(xpos_u)
+                ax3u.set_xticklabels(xlbls_u, rotation=30, ha="right", fontsize=8)
+                ax3u.set_title(
+                    "Komponen Eksogen (BI Rate, Harga Minyak, Kurs, Lag)",
+                    fontsize=10, pad=8)
+                ax3u.set_ylabel("Kontribusi", fontsize=9)
+                ax3u.set_xlabel("Periode Prediksi", fontsize=9)
+                ax3u.legend(fontsize=9, framealpha=.3,
+                            facecolor="#1A202C", edgecolor="#2D3748")
+                ax3u.grid(True, alpha=.4, axis="y")
+
+                for ax_ in axes_u[:3]:
+                    ax_.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+                    ax_.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+                    plt.setp(ax_.xaxis.get_majorticklabels(),
+                             rotation=30, ha="right", fontsize=8)
+                plt.tight_layout()
+                st.pyplot(fig_u)
+                plt.close()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='section-header'>Tabel Dekomposisi</div>",
+                    unsafe_allow_html=True)
+                rows_u = ""
+                for i_, d_ in enumerate(future_dates):
+                    pr_t, pr_s, pr_e = props_u[i_]
+                    rows_u += (
+                        f"<tr>"
+                        f"<td>{pd.to_datetime(d_).strftime('%B %Y')}</td>"
+                        f"<td style='color:#63B3ED;font-weight:600;'>{du_tot[i_]*100:.4f}%</td>"
+                        f"<td style='color:#68D391;'>{du_t[i_]:.4f}</td>"
+                        f"<td style='color:#F6AD55;'>{du_s[i_]:.4f}</td>"
+                        f"<td style='color:#63B3ED;'>{du_e[i_]:.4f}</td>"
+                        f"<td style='color:#718096;'>"
+                        f"T:{pr_t:.1f}% S:{pr_s:.1f}% E:{pr_e:.1f}%</td>"
+                        f"</tr>"
+                    )
+                st.markdown(
+                    f"""<table class="pred-table">
+                        <tr><th>Periode</th><th>Total Prediksi</th>
+                        <th>Trend</th><th>Seasonality</th>
+                        <th>Eksogen</th><th>Proporsi</th></tr>
+                        {rows_u}
+                    </table>""",
+                    unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                dl_u = pd.DataFrame({
+                    "Periode": [pd.to_datetime(d_).strftime("%Y-%m")
+                                for d_ in future_dates],
+                    "Total_%":        [f"{v*100:.4f}" for v in du_tot],
+                    "Trend":          [f"{v:.6f}" for v in du_t],
+                    "Seasonality":    [f"{v:.6f}" for v in du_s],
+                    "Eksogen":        [f"{v:.6f}" for v in du_e],
+                    "Pct_Trend":      [f"{p[0]:.2f}" for p in props_u],
+                    "Pct_Seasonality":[f"{p[1]:.2f}" for p in props_u],
+                    "Pct_Eksogen":    [f"{p[2]:.2f}" for p in props_u],
+                })
+                st.download_button(
+                    "⬇️ Download Tabel Dekomposisi (CSV)",
+                    dl_u.to_csv(index=False).encode("utf-8"),
+                    file_name="dekomposisi_upload.csv", mime="text/csv")
+            else:
+                st.warning("⚠️ " + dc.get("error","Dekomposisi gagal."))
+
+    # ════════════════════════════════════════════════════════
+    # TAB 4 — ANALISIS MODEL
+    # ════════════════════════════════════════════════════════
+    with tab3:
+        if _default:
+            # Metrik tetap dari penelitian
+            st.markdown(
+                "<div class='section-header'>Performa Model pada Data Uji (Data Bawaan)</div>",
+                unsafe_allow_html=True)
+            ma1, ma2, ma3 = st.columns(3)
+            for col_, (lbl, val, desc) in zip(
+                [ma1, ma2, ma3],
+                [("MAE",   "0.00601", "Mean Absolute Error"),
+                 ("RMSE",  "0.00834", "Root Mean Squared Error"),
+                 ("SMAPE", "41.76%",  "Symmetric MAPE")]
+            ):
+                with col_:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">{lbl}</div>
+                        <div class="metric-value">{val}</div>
+                        <div class="metric-sub">{desc}</div>
+                    </div>""", unsafe_allow_html=True)
+        else:
+            # Hitung metrik dari data upload
+            st.markdown(
+                "<div class='section-header'>Performa Prediksi pada Data Upload</div>",
+                unsafe_allow_html=True)
+            # Bandingkan pred_vals dengan hist_y terakhir (overlap jika ada)
+            last_actuals = hist_y[-config["h"]:]
+            last_dates_a = hist_ds[-config["h"]:]
+            if len(last_actuals) == config["h"]:
+                mae_u  = np.mean(np.abs(last_actuals - pred_vals))
+                rmse_u = np.sqrt(np.mean((last_actuals - pred_vals)**2))
+                denom  = (np.abs(last_actuals) + np.abs(pred_vals))
+                denom  = np.where(denom < 1e-6, 1.0, denom)
+                smape_u = np.mean(2*np.abs(last_actuals - pred_vals)/denom)*100
+                ma1u, ma2u, ma3u = st.columns(3)
+                for col_, (lbl, val, desc) in zip(
+                    [ma1u, ma2u, ma3u],
+                    [("MAE",   f"{mae_u:.5f}",  "Mean Absolute Error"),
+                     ("RMSE",  f"{rmse_u:.5f}", "Root Mean Squared Error"),
+                     ("SMAPE", f"{smape_u:.2f}%","Symmetric MAPE")]
+                ):
+                    with col_:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-label">{lbl}</div>
+                            <div class="metric-value">{val}</div>
+                            <div class="metric-sub">{desc}</div>
+                        </div>""", unsafe_allow_html=True)
+                st.markdown(
+                    f"""<div class="info-box" style="margin-top:.75rem;">
+                        Metrik dihitung dari perbandingan prediksi masa depan
+                        terhadap {config["h"]} observasi terakhir data upload
+                        ({last_dates_a[0].strftime("%b %Y")} –
+                        {last_dates_a[-1].strftime("%b %Y")}).
+                    </div>""",
+                    unsafe_allow_html=True)
+            else:
+                st.info("Data terlalu pendek untuk menghitung metrik evaluasi.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-header'>Perbandingan Model (Data Penelitian)</div>",
+            unsafe_allow_html=True)
+        comp = [
+            ("N-BEATSx + BO ★","0.00601","0.00834","41.76%", True),
+            ("Prophet",         "0.00487","0.00592","43.96%", False),
+            ("SARIMAX",         "0.00717","0.00905","46.40%", False),
+            ("N-BEATSx Default","0.00530","0.00726","40.72%", False),
+            ("N-BEATS",         "0.01039","0.01223","62.34%", False),
+        ]
+        rows_c = ""
+        for mdl, mae, rmse, smape, is_ours in comp:
+            s = "color:#63B3ED;font-weight:700;" if is_ours else "color:#A0AEC0;"
+            r = "background:#0d1a2e;" if is_ours else ""
+            rows_c += (
+                f"<tr style='{r}'>"
+                f"<td style='{s}'>{mdl}</td>"
+                f"<td style='{s}'>{mae}</td>"
+                f"<td style='{s}'>{rmse}</td>"
+                f"<td style='{s}'>{smape}</td></tr>"
+            )
+        st.markdown(
+            f"""<table class="pred-table">
+                <tr><th>Model</th><th>MAE ↓</th>
+                <th>RMSE ↓</th><th>SMAPE ↓</th></tr>
+                {rows_c}
+            </table>
+            <div style="font-size:.73rem;color:#4A5568;margin-top:6px;">
+                ★ = model yang dikembangkan · ↓ = semakin kecil semakin baik
+            </div>""",
+            unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-header'>Uji Asumsi Residual (Data Penelitian)</div>",
+            unsafe_allow_html=True)
+        r1c, r2c = st.columns(2)
+        for i_, (test, stat, result) in enumerate([
+            ("Rata-rata Residual", "ē = −0.004927", "Mendekati nol ✅"),
+            ("Shapiro-Wilk",       "W=0.9152, p=0.2489", "Normal ✅"),
+            ("Ljung-Box (lag=6)",  "Q=5.2282, p=0.5149", "Tidak autokorelasi ✅"),
+            ("Breusch-Pagan",      "LM=8.8344, p=0.2648", "Homoskedastis ✅"),
+        ]):
+            with (r1c if i_ % 2 == 0 else r2c):
+                st.markdown(f"""
+                <div class="metric-card" style="text-align:left;margin-bottom:.8rem;">
+                    <div class="metric-label">{test}</div>
+                    <div style="font-family:Space Mono,monospace;
+                         font-size:.82rem;color:#A0AEC0;margin:.3rem 0;">
+                         {stat}</div>
+                    <div style="color:#68D391;font-size:.8rem;
+                         font-weight:600;">{result}</div>
+                </div>""", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════
+    # TAB 5 — PANDUAN
+    # ════════════════════════════════════════════════════════
+    with tab4:
+        st.markdown(
+            "<div class='section-header'>Panduan Penggunaan</div>",
+            unsafe_allow_html=True)
+        st.markdown(
+            """<div class="info-box">
+                <b>Format File:</b> CSV (.csv) atau Excel (.xlsx)<br><br>
+                <b>Kolom yang Diperlukan:</b><br>
+                • <code>Date / ds / Tanggal</code> — Tanggal (YYYY-MM-DD)<br>
+                • <code>Inflasi Umum / y / Inflasi</code> — Nilai inflasi desimal<br>
+                • <code>BI Rate</code> — Suku bunga kebijakan (desimal)<br>
+                • <code>Harga Minyak Dunia</code> — USD per barel<br>
+                • <code>Kurs USD/IDR</code> — Nilai tukar rupiah<br><br>
+                <b>Frekuensi:</b> Bulanan &nbsp;·&nbsp;
+                <b>Minimum:</b> 36 baris (3 tahun)
+            </div>
+            <div class="warning-box" style="margin-top:1rem;">
+                <b>Catatan:</b> Prediksi bersifat indikatif berdasarkan pola
+                historis. Model tidak dapat mengantisipasi kejadian ekstrem
+                yang tidak terwakili dalam data pelatihan.
+            </div>""",
+            unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════
 # ROUTER
