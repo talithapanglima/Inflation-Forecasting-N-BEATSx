@@ -1995,26 +1995,42 @@ def page_prediksi():
         ax2.grid(True, alpha=.4)
 
         # Panel 4: Komponen Eksogen (bar chart)
+        # Gunakan label string kategorikal agar bar terlihat
         ax3 = axes[3]
-        bars = ax3.bar(ds_vals, decomp_df['exogenous_orig'],
-                    color='#63B3ED', alpha=0.8, width=20)
+        bar_labels = [pd.to_datetime(d).strftime('%b %Y') for d in ds_vals]
+        x_pos      = np.arange(len(bar_labels))
+        bars = ax3.bar(
+            x_pos,
+            decomp_df['exogenous_orig'].values,
+            color='#63B3ED', alpha=0.85, width=0.6,
+            label='Eksogen'
+        )
         for bar, val in zip(bars, decomp_df['exogenous_orig']):
-            ax3.text(bar.get_x() + bar.get_width()/2,
-                    bar.get_height() + 0.001,
-                    f'{val:.4f}', ha='center', va='bottom',
-                    fontsize=7.5, color='#A0AEC0', fontfamily='monospace')
-        ax3.set_title('Komponen Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag)',
-                    fontsize=10, pad=8)
+            ax3.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.0008,
+                f'{val:.4f}',
+                ha='center', va='bottom',
+                fontsize=7, color='#A0AEC0', fontfamily='monospace'
+            )
+        ax3.set_xticks(x_pos)
+        ax3.set_xticklabels(bar_labels, rotation=30, ha='right', fontsize=8)
+        ax3.set_title(
+            'Komponen Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag)',
+            fontsize=10, pad=8
+        )
         ax3.set_ylabel('Kontribusi', fontsize=9)
         ax3.set_xlabel('Tanggal', fontsize=9)
+        ax3.legend(fontsize=9, framealpha=.3,
+                   facecolor='#1A202C', edgecolor='#2D3748')
         ax3.grid(True, alpha=.4, axis='y')
 
-        # Format sumbu X semua panel
-        for ax in axes:
+        # Format sumbu X 3 panel pertama (bukan ax3 yg sudah pakai string)
+        for ax in axes[:3]:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
             ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
             plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha='right',
-                    fontsize=8)
+                     fontsize=8)
 
         plt.tight_layout()
         st.pyplot(fig)
