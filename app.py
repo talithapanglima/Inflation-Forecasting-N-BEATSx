@@ -1820,10 +1820,10 @@ def page_prediksi():
 
             pred_vals = st.session_state["custom_pred_vals"]
             future_dates = st.session_state["custom_pred_dates"]
-            fut_dummy = st.session_state["custom_fut_df"]
+            fut_df = st.session_state["custom_fut_df"]
         else:
             last_date = pd.to_datetime(df_feat["ds"].max())
-            fut_dummy = make_future_dummy(
+            fut_df = make_future_dummy(
                 last_date,
                 config["h"],
                 config
@@ -1831,7 +1831,7 @@ def page_prediksi():
 
             forecast = nf.predict(
                 df=df_scaled,
-                futr_df=fut_dummy
+                futr_df=fut_df
             )
 
             pred_vals = scaler_y.inverse_transform(
