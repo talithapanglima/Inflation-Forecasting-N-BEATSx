@@ -607,7 +607,7 @@ def page_home():
 
 
 
-def decompose_forecast(nf, nf_trend, nf_season, df_scaled, fut_dummy, scaler_y):
+def decompose_forecast(nf, nf_trend, nf_season, df_scaled, fut_df, scaler_y):
     """
     Dekomposisi N-BEATSx mengikuti metodologi kode penelitian secara tepat.
 
@@ -1287,7 +1287,7 @@ def page_upload():
             # Hitung dekomposisi
             with st.spinner("Menghitung dekomposisi…"):
                 decomp_custom = decompose_forecast(
-                    nf, df_scaled, fut_df, scaler_y
+                    nf, nf_trend, nf_season, df_scaled, fut_df, scaler_y
                 )
             # Simpan ke session state
             st.session_state["custom_decomp"] = decomp_custom
@@ -2233,7 +2233,7 @@ def page_prediksi():
                 </div>""",
                 unsafe_allow_html=True)
             with st.spinner("Menghitung dekomposisi…"):
-                dc = decompose_forecast(nf, df_scaled, fut_dummy, scaler_y)
+                dc = decompose_forecast(nf, nf_trend, nf_season, df_scaled, fut_df, scaler_y)
 
             if dc["success"]:
                 du_t, du_s, du_e, du_tot = (
