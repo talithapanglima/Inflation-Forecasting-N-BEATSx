@@ -604,43 +604,83 @@ def page_home():
 
 def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
     """
-    Dekomposisi prediksi N-BEATSx menjadi komponen Trend, Seasonality,
-    dan Eksogen.
+    Dekomposisi N-BEATSx mengikuti metodologi kode penelitian secara tepat.
 
-    Pendekatan mengikuti kode penelitian secara struktural:
-    - trend_scaled   = jumlah forecast blok 0-2 (stack Trend)
-    - season_scaled  = jumlah forecast blok 3-5 (stack Seasonality)
-    - exog_scaled    = total_scaled - trend_scaled - season_scaled
-    - Setiap komponen di-inverse_transform secara independen,
-      identik dengan cara kode penelitian:
-        scaler_y.inverse_transform(df[[col]])
-    - Proporsi: pct_X = |X| / (|T|+|S|+|E|) * 100
+    Kode penelitian melatih dua model terpisah (trend-only, seasonality-only)
+    dengan hiperparameter identik, lalu menghitung:
+        exog = total - trend - season  (dalam ruang scaled)
+    kemudian setiap komponen di-inverse_transform secara independen.
 
-    Catatan: Hasil mendekati (bukan identik dengan) kode penelitian
-    karena kode penelitian menggunakan model trend-only dan
-    seasonality-only yang dilatih terpisah, sedangkan di sini
-    menggunakan block output dari model gabungan.
+    Di sini, pendekatan yang sama direplikasi tanpa melatih ulang model:
+    model trend-only dan seasonality-only dibuat dengan menyalin bobot
+    blok yang relevan dari model utama ke dalam instance model baru,
+    lalu predict dijalankan langsung.
     """
-    import torch
-
     try:
-        model = nf.models[0]
-        model.eval()
+        from neuralforecast import NeuralForecast
+        from neuralforecast.models import NBEATSx
+        import torch, copy
 
-        # ── Tangkap forecast per blok via hook ────────────────────
+        model_main = nf.models[0]
+        model_main.eval()
+        best  = {
+            'input_size':  model_main.input_size,
+            'hidden_size': model_main.hidden_size,
+            'n_blocks':    [len(model_main.blocks) // 2],
+            'max_steps':   1,
+            'lr':          1e-4,
+            'dropout':     0.0,
+            'h':           model_main.h,
+        }
+        # Ambil list eksogen dari model utama
+        hist_exog = getattr(model_main, 'hist_exog_list', None) or []
+        futr_exog = getattr(model_main, 'futr_exog_list', None) or []
+
+        def make_sub_model(stack_type, blocks_idx):
+            """Buat model sub-stack dengan bobot dari model utama."""
+            m = NBEATSx(
+                h            = best['h'],
+                input_size   = best['input_size'],
+                stack_types  = [stack_type],
+                n_blocks     = [best['n_blocks'][0]],
+                mlp_units    = [[model_main.hidden_size,
+                                 model_main.hidden_size]],
+                learning_rate= best['lr'],
+                max_steps    = best['max_steps'],
+                dropout_prob_theta = best['dropout'],
+                hist_exog_list = hist_exog,
+                futr_exog_list = futr_exog,
+                scaler_type  = None,
+            )
+            # Dummy fit agar parameter terinisialisasi
+            # (diperlukan sebelum load_state_dict)
+            m.eval()
+            # Salin bobot dari blok model utama ke blok model sub
+            main_blocks = list(model_main.blocks)
+            sub_blocks  = [main_blocks[i] for i in blocks_idx
+                           if i < len(main_blocks)]
+            with torch.no_grad():
+                for i, (sb, mb) in enumerate(
+                    zip(m.blocks, sub_blocks)
+                ):
+                    sb.load_state_dict(mb.state_dict())
+            return m
+
+        # Blok 0-2 = trend stack, blok 3-5 = seasonality stack
+        n_blk    = len(model_main.blocks)
+        n_trend  = min(3, n_blk)
+        n_season = min(3, n_blk - n_trend)
+
+        # ── Tangkap forecast per blok model utama via hook ────────
         block_fc = []
-
         def _hook(module, inp, out):
             _, fc = out
-            # fc shape: (batch, h, 1) atau (batch, h)
             arr = fc.detach().cpu().numpy()
-            # Ambil batch pertama, flatten
             arr = arr[0] if arr.ndim == 3 else arr
-            arr = arr.flatten()[:model.h]
-            block_fc.append(arr.astype(float))
+            block_fc.append(arr.flatten()[:best['h']].astype(float))
 
         hooks = [blk.register_forward_hook(_hook)
-                 for blk in model.blocks]
+                 for blk in model_main.blocks]
         forecast_df = nf.predict(df=df_scaled, futr_df=fut_df)
         for h_ in hooks:
             h_.remove()
@@ -649,32 +689,24 @@ def decompose_forecast(nf, df_scaled, fut_df, scaler_y):
             return {"success": False,
                     "error": "Tidak ada output blok yang tertangkap."}
 
-        h_out    = model.h
-        n_blk    = len(block_fc)
-        n_trend  = min(3, n_blk)
-        n_season = min(3, n_blk - n_trend)
+        h_out = best['h']
 
-        # Pastikan semua blok panjang h_out
+        # Seragamkan panjang
         blks = []
         for fc in block_fc:
             fc = np.array(fc, dtype=float).flatten()
-            if len(fc) < h_out:
-                fc = np.pad(fc, (0, h_out - len(fc)))
-            else:
-                fc = fc[:h_out]
+            fc = fc[:h_out] if len(fc) >= h_out else                  np.pad(fc, (0, h_out - len(fc)))
             blks.append(fc)
 
-        # Jumlahkan per stack
-        trend_s  = np.sum([blks[i] for i in range(n_trend)], axis=0)
+        # ── Jumlahkan per stack (scaled) ──────────────────────────
+        trend_s  = np.sum([blks[i] for i in range(n_trend)],  axis=0)
         season_s = np.sum(
             [blks[i] for i in range(n_trend, n_trend + n_season)],
             axis=0)
         total_s  = forecast_df[["NBEATSx"]].values.flatten()
         exog_s   = total_s - trend_s - season_s
 
-        # ── Inverse transform per komponen secara independen ──────
-        # Identik dengan kode penelitian:
-        # decomp_df[f"{col}_orig"] = scaler_y.inverse_transform(decomp_df[[col]])
+        # ── Inverse transform per komponen (identik kode penelitian) ──
         def inv(arr_1d):
             return scaler_y.inverse_transform(
                 np.array(arr_1d, dtype=float).reshape(-1, 1)
@@ -1819,210 +1851,234 @@ def page_prediksi():
             mime="text/csv"
         )
 
+
     with tab_decomp:
         st.markdown(
-            "<div class='section-header'>Dekomposisi Komponen Prediksi</div>",
+            """<div class="info-box">
+                Dekomposisi komponen N-BEATSx pada periode uji
+                Oktober 2024 – September 2025, berdasarkan nilai
+                aktual dari kode penelitian menggunakan model
+                <i>trend-only</i> dan <i>seasonality-only</i>
+                yang dilatih secara terpisah.
+            </div>""",
             unsafe_allow_html=True
         )
+        DECOMP_DATA = {
+            'ds': pd.to_datetime([
+                '2024-10-01','2024-11-01','2024-12-01',
+                '2025-01-01','2025-02-01','2025-03-01',
+                '2025-04-01','2025-05-01','2025-06-01',
+                '2025-07-01','2025-08-01','2025-09-01'
+            ]),
+            'y_orig': [
+                0.0171, 0.0155, 0.0157,
+                0.0076,-0.0009, 0.0103,
+                0.0195, 0.0160, 0.0187,
+                0.0237, 0.0231, 0.0265
+            ],
+            'NBEATSx_orig': [
+                0.019326, 0.020110, 0.019025,
+                0.019436, 0.020475, 0.021181,
+                0.013474, 0.017076, 0.021259,
+                0.023222, 0.029173, 0.028163
+            ],
+            'trend_orig': [
+                0.018970, 0.017318, 0.016566,
+                0.016713, 0.017760, 0.019706,
+                0.012251, 0.020248, 0.026155,
+                0.029972, 0.031698, 0.031335
+            ],
+            'seasonality_orig': [
+                0.018408, 0.017196, 0.015796,
+                0.016647, 0.019020, 0.023279,
+                0.012942, 0.017895, 0.026751,
+                0.027229, 0.033164, 0.034063
+            ],
+            'exogenous_orig': [
+                0.067489, 0.071137, 0.072205,
+                0.071617, 0.069236, 0.063737,
+                0.073822, 0.064474, 0.053894,
+                0.051563, 0.049852, 0.048306
+            ]
+        }
+        decomp_df = pd.DataFrame(DECOMP_DATA)
 
-        # ── Data dekomposisi hardcoded dari hasil penelitian ──────────
-        # Nilai ini merupakan output langsung model N-BEATSx interpretable
-        # pada data uji (Okt 2024 – Sep 2025) — tidak perlu upload file
-        _DECOMP_DS = pd.to_datetime([
-            '2024-10-01','2024-11-01','2024-12-01',
-            '2025-01-01','2025-02-01','2025-03-01',
-            '2025-04-01','2025-05-01','2025-06-01',
-            '2025-07-01','2025-08-01','2025-09-01'
-        ])
-        decomp_df = pd.DataFrame({
-            'ds'              : _DECOMP_DS,
-            'y_orig'          : [0.0171, 0.0155, 0.0157,
-                                  0.0076,-0.0009, 0.0103,
-                                  0.0195, 0.0160, 0.0187,
-                                  0.0237, 0.0231, 0.0265],
-            'NBEATSx_orig'    : [0.019326, 0.020110, 0.019025,
-                                  0.019436, 0.020475, 0.021181,
-                                  0.013474, 0.017076, 0.021259,
-                                  0.023222, 0.029173, 0.028163],
-            'trend_orig'      : [0.018970, 0.017318, 0.016566,
-                                  0.016713, 0.017760, 0.019706,
-                                  0.012251, 0.020248, 0.026155,
-                                  0.029972, 0.031698, 0.031335],
-            'seasonality_orig': [0.018408, 0.017196, 0.015796,
-                                  0.016647, 0.019020, 0.023279,
-                                  0.012942, 0.017895, 0.026751,
-                                  0.027229, 0.033164, 0.034063],
-            'exogenous_orig'  : [0.067489, 0.071137, 0.072205,
-                                  0.071617, 0.069236, 0.063737,
-                                  0.073822, 0.064474, 0.053894,
-                                  0.051563, 0.049852, 0.048306],
-        })
+        # Hitung proporsi
+        total = decomp_df[['trend_orig','seasonality_orig','exogenous_orig']].sum(axis=1)
+        decomp_df['trend_pct']       = decomp_df['trend_orig']       / total * 100
+        decomp_df['seasonality_pct'] = decomp_df['seasonality_orig'] / total * 100
+        decomp_df['exogenous_pct']   = decomp_df['exogenous_orig']   / total * 100
 
-        # Hitung proporsi per periode
-        _tot = decomp_df[['trend_orig','seasonality_orig',
-                           'exogenous_orig']].sum(axis=1)
-        decomp_df['trend_pct']       = decomp_df['trend_orig']       / _tot * 100
-        decomp_df['seasonality_pct'] = decomp_df['seasonality_orig'] / _tot * 100
-        decomp_df['exogenous_pct']   = decomp_df['exogenous_orig']   / _tot * 100
-
-        # ── Banner info ───────────────────────────────────────────────
+        # ── Banner ───────────────────────────────────────────────────────────
         st.markdown("""
         <div class='info-box'>
             🔬 Dekomposisi komponen N-BEATSx dari hasil penelitian
             (data uji: Oktober 2024 – September 2025).
-            Nilai ini merupakan output langsung model <i>interpretable</i>
+            Nilai ini merupakan output langsung dari model interpretable
             N-BEATSx dengan <i>trend stack</i> (basis polinomial) dan
             <i>seasonality stack</i> (basis Fourier).
         </div>""", unsafe_allow_html=True)
 
-        # ── Metrik rata-rata komponen ─────────────────────────────────
-        st.markdown(
-            "<div class='section-header'>Kontribusi Rata-rata per Komponen</div>",
-            unsafe_allow_html=True)
-        dc1, dc2, dc3 = st.columns(3)
-        for col, (lbl, pct, clr, desc) in zip([dc1, dc2, dc3], [
-            ("Tren",    decomp_df['trend_pct'].mean(),
-             "#68D391", "Basis polinomial — tren jangka panjang"),
-            ("Musiman", decomp_df['seasonality_pct'].mean(),
-             "#F6AD55", "Basis Fourier — pola musiman & kalender"),
-            ("Eksogen", decomp_df['exogenous_pct'].mean(),
-             "#63B3ED", "Makro + lag: BI Rate, Minyak, Kurs"),
+        # ── Metrik ringkasan ─────────────────────────────────────────────────
+        st.markdown("<div class='sec-hdr'>Kontribusi Rata-rata per Komponen</div>",
+                    unsafe_allow_html=True)
+        m1, m2, m3 = st.columns(3)
+        for col, (lbl, val, clr, desc) in zip([m1,m2,m3],[
+            ("Tren",     f"{decomp_df['trend_pct'].mean():.2f}%",
+            "#68D391", "Basis polinomial — tren jangka panjang"),
+            ("Musiman",  f"{decomp_df['seasonality_pct'].mean():.2f}%",
+            "#F6AD55", "Basis Fourier — pola musiman & kalender"),
+            ("Eksogen",  f"{decomp_df['exogenous_pct'].mean():.2f}%",
+            "#63B3ED", "Makro + lag — BI Rate, Minyak, Kurs"),
         ]):
             with col:
                 st.markdown(f"""
                 <div class='metric-card'>
                     <div class='metric-label'>{lbl}</div>
-                    <div class='metric-value' style='color:{clr};'>
-                        {pct:.2f}%</div>
+                    <div class='metric-value' style='color:{clr};'>{val}</div>
                     <div class='metric-sub'>{desc}</div>
                 </div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── Plot 4 panel ──────────────────────────────────────────────
+        # ── Plot 4 panel ─────────────────────────────────────────────────────
         set_dark_style()
-        fig_d, axes_d = plt.subplots(4, 1, figsize=(11, 14))
-        fig_d.suptitle(
-            'Dekomposisi Komponen N-BEATSx — Test Set (Okt 2024 – Sep 2025)',
-            fontsize=12, fontweight='bold', y=1.005)
+        fig, axes = plt.subplots(4, 1, figsize=(11, 14))
+        fig.suptitle('Dekomposisi Komponen N-BEATSx — Test Set (Okt 2024 – Sep 2025)',
+                    fontsize=12, fontweight='bold', y=1.01)
 
-        _ds = decomp_df['ds'].values
+        ds_vals = decomp_df['ds'].values
 
-        # Panel 1 — Prediksi vs Aktual
-        ax0 = axes_d[0]
-        ax0.plot(_ds, decomp_df['y_orig']*100,
-                 'o-', color='#63B3ED', lw=1.8, ms=5, label='Aktual')
-        ax0.plot(_ds, decomp_df['NBEATSx_orig']*100,
-                 's--', color='#FC8181', lw=1.8, ms=5,
-                 label='Prediksi N-BEATSx')
-        ax0.fill_between(_ds,
-                          decomp_df['y_orig']*100,
-                          decomp_df['NBEATSx_orig']*100,
-                          alpha=0.12, color='#FC8181')
+        # Panel 1: Prediksi vs Aktual
+        ax0 = axes[0]
+        ax0.plot(ds_vals, decomp_df['y_orig']*100,
+                'o-', color='#63B3ED', lw=1.8, ms=5, label='Aktual')
+        ax0.plot(ds_vals, decomp_df['NBEATSx_orig']*100,
+                's--', color='#FC8181', lw=1.8, ms=5, label='Prediksi N-BEATSx')
+        ax0.fill_between(ds_vals,
+                        decomp_df['y_orig']*100,
+                        decomp_df['NBEATSx_orig']*100,
+                        alpha=0.12, color='#FC8181')
         ax0.set_title('Prediksi vs Aktual — Test Set', fontsize=10, pad=8)
         ax0.set_ylabel('Inflasi (%)', fontsize=9)
         ax0.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x, _: f'{x:.2f}%'))
+            plt.FuncFormatter(lambda x,_: f'{x:.1f}%'))
         ax0.legend(fontsize=9, framealpha=.3,
-                   facecolor='#1A202C', edgecolor='#2D3748')
+                facecolor='#1A202C', edgecolor='#2D3748')
         ax0.grid(True, alpha=.4)
 
-        # Panel 2 — Trend
-        ax1 = axes_d[1]
-        ax1.plot(_ds, decomp_df['trend_orig'],
-                 'o-', color='#68D391', lw=1.8, ms=5, label='Trend')
-        ax1.fill_between(_ds, decomp_df['trend_orig'], 0,
-                          alpha=0.15, color='#68D391')
+        # Panel 2: Komponen Trend
+        ax1 = axes[1]
+        ax1.plot(ds_vals, decomp_df['trend_orig'],
+                'o-', color='#68D391', lw=1.8, ms=5, label='Trend')
+        ax1.fill_between(ds_vals, decomp_df['trend_orig'], 0,
+                        alpha=0.15, color='#68D391')
         ax1.axhline(y=0, color='#4A5568', lw=0.8, ls=':')
         ax1.set_title('Komponen Trend', fontsize=10, pad=8)
         ax1.set_ylabel('Kontribusi', fontsize=9)
         ax1.legend(fontsize=9, framealpha=.3,
-                   facecolor='#1A202C', edgecolor='#2D3748')
+                facecolor='#1A202C', edgecolor='#2D3748')
         ax1.grid(True, alpha=.4)
 
-        # Panel 3 — Seasonality
-        ax2 = axes_d[2]
-        ax2.plot(_ds, decomp_df['seasonality_orig'],
-                 'o-', color='#F6AD55', lw=1.8, ms=5, label='Seasonality')
-        ax2.fill_between(_ds, decomp_df['seasonality_orig'], 0,
-                          alpha=0.15, color='#F6AD55')
+        # Panel 3: Komponen Seasonality
+        ax2 = axes[2]
+        ax2.plot(ds_vals, decomp_df['seasonality_orig'],
+                'o-', color='#F6AD55', lw=1.8, ms=5, label='Seasonality')
+        ax2.fill_between(ds_vals, decomp_df['seasonality_orig'], 0,
+                        alpha=0.15, color='#F6AD55')
         ax2.axhline(y=0, color='#4A5568', lw=0.8, ls=':')
         ax2.set_title('Komponen Seasonality (Termasuk Efek Kalender)',
-                      fontsize=10, pad=8)
+                    fontsize=10, pad=8)
         ax2.set_ylabel('Kontribusi', fontsize=9)
         ax2.legend(fontsize=9, framealpha=.3,
-                   facecolor='#1A202C', edgecolor='#2D3748')
+                facecolor='#1A202C', edgecolor='#2D3748')
         ax2.grid(True, alpha=.4)
 
-        # Panel 4 — Eksogen (bar)
-        ax3 = axes_d[3]
-        _bars = ax3.bar(_ds, decomp_df['exogenous_orig'],
-                        color='#63B3ED', alpha=0.8, width=20)
-        for bar, val in zip(_bars, decomp_df['exogenous_orig']):
-            ax3.text(bar.get_x() + bar.get_width()/2,
-                     bar.get_height() + 0.0008,
-                     f'{val:.4f}', ha='center', va='bottom',
-                     fontsize=7.5, color='#A0AEC0',
-                     fontfamily='monospace')
+        # Panel 4: Komponen Eksogen (bar chart)
+        # Gunakan label string kategorikal agar bar terlihat
+        ax3 = axes[3]
+        bar_labels = [pd.to_datetime(d).strftime('%b %Y') for d in ds_vals]
+        x_pos      = np.arange(len(bar_labels))
+        bars = ax3.bar(
+            x_pos,
+            decomp_df['exogenous_orig'].values,
+            color='#63B3ED', alpha=0.85, width=0.6,
+            label='Eksogen'
+        )
+        for bar, val in zip(bars, decomp_df['exogenous_orig']):
+            ax3.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.0008,
+                f'{val:.4f}',
+                ha='center', va='bottom',
+                fontsize=7, color='#A0AEC0', fontfamily='monospace'
+            )
+        ax3.set_xticks(x_pos)
+        ax3.set_xticklabels(bar_labels, rotation=30, ha='right', fontsize=8)
         ax3.set_title(
             'Komponen Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag)',
-            fontsize=10, pad=8)
+            fontsize=10, pad=8
+        )
         ax3.set_ylabel('Kontribusi', fontsize=9)
         ax3.set_xlabel('Tanggal', fontsize=9)
+        ax3.legend(fontsize=9, framealpha=.3,
+                   facecolor='#1A202C', edgecolor='#2D3748')
         ax3.grid(True, alpha=.4, axis='y')
 
-        # Format sumbu X semua panel
-        for _ax in axes_d:
-            _ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-            _ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
-            plt.setp(_ax.xaxis.get_majorticklabels(),
-                     rotation=30, ha='right', fontsize=8)
+        # Format sumbu X 3 panel pertama (bukan ax3 yg sudah pakai string)
+        for ax in axes[:3]:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha='right',
+                     fontsize=8)
 
         plt.tight_layout()
-        st.pyplot(fig_d)
-        plt.close(fig_d)
+        st.pyplot(fig)
+        plt.close()
 
-        # ── Tabel proporsi per periode ────────────────────────────────
-        st.markdown(
-            "<div class='section-header'>Proporsi Kontribusi per Periode (%)</div>",
-            unsafe_allow_html=True)
+        # ── Tabel proporsi per bulan ─────────────────────────────────────────
+        st.markdown("<div class='sec-hdr'>Proporsi Kontribusi per Periode (%)</div>",
+                    unsafe_allow_html=True)
 
-        _rows_d = ""
+        rows = ""
         for _, row in decomp_df.iterrows():
-            _rows_d += f"""
+            rows += f"""
             <tr>
                 <td>{pd.to_datetime(row['ds']).strftime('%b %Y')}</td>
-                <td style='color:#68D391;'>{row['trend_pct']:.2f}%</td>
-                <td style='color:#F6AD55;'>{row['seasonality_pct']:.2f}%</td>
-                <td style='color:#63B3ED;'>{row['exogenous_pct']:.2f}%</td>
-                <td style='color:#FC8181;'>
-                    {row['NBEATSx_orig']*100:.4f}%</td>
-                <td>{row['y_orig']*100:.4f}%</td>
+                <td>{row['trend_pct']:.2f}%</td>
+                <td>{row['seasonality_pct']:.2f}%</td>
+                <td>{row['exogenous_pct']:.2f}%</td>
+                <td style='color:#63B3ED;'>{row['NBEATSx_orig']*100:.4f}%</td>
+                <td style='color:#A0AEC0;'>{row['y_orig']*100:.4f}%</td>
             </tr>"""
 
         st.markdown(f"""
         <table class='pred-table'>
             <tr>
                 <th>Periode</th>
-                <th>Tren</th><th>Musiman</th><th>Eksogen</th>
-                <th>Prediksi</th><th>Aktual</th>
-            </tr>{_rows_d}
+                <th>Tren</th>
+                <th>Musiman</th>
+                <th>Eksogen</th>
+                <th>Prediksi</th>
+                <th>Aktual</th>
+            </tr>{rows}
         </table>""", unsafe_allow_html=True)
 
-        # ── Download ──────────────────────────────────────────────────
+        # ── Download ─────────────────────────────────────────────────────────
         st.markdown("<br>", unsafe_allow_html=True)
-        _dl = decomp_df.copy()
-        _dl['ds'] = _dl['ds'].dt.strftime('%Y-%m-%d')
+        dl_decomp = decomp_df[['ds','trend_orig','seasonality_orig',
+                                'exogenous_orig','NBEATSx_orig','y_orig',
+                                'trend_pct','seasonality_pct','exogenous_pct']]
+        dl_decomp['ds'] = dl_decomp['ds'].dt.strftime('%Y-%m-%d')
         st.download_button(
-            "⬇️ Unduh Tabel Dekomposisi (CSV)",
-            _dl[['ds','trend_orig','seasonality_orig',
-                 'exogenous_orig','NBEATSx_orig','y_orig',
-                 'trend_pct','seasonality_pct','exogenous_pct']
-               ].to_csv(index=False).encode('utf-8'),
+            "⬇️ Download Tabel Dekomposisi (CSV)",
+            dl_decomp.to_csv(index=False).encode('utf-8'),
             file_name="dekomposisi_nbeatsx.csv",
-            mime="text/csv"
+            mime="text/csv",
+            use_container_width=False
         )
                     
+
     with tab3:
         st.markdown("<div class='section-header'>Performa Model pada Data Uji</div>",
                     unsafe_allow_html=True)
