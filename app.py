@@ -1332,6 +1332,7 @@ def page_upload():
                 st.session_state["custom_pred_dates"] = future_dates
                 st.session_state["custom_exog"]       = exog_inputs
                 st.session_state["custom_dummy"]       = dummy_inputs
+                st.session_state["custom_fut_df"] = fut_df.copy()
                 pred_ok = True
             except Exception as e:
                 st.error(f"❌ Prediksi gagal: {e}")
@@ -1842,7 +1843,11 @@ def page_prediksi():
     _default = st.session_state.uploaded_df is None
     use_raw  = full_data_raw if _default else st.session_state.uploaded_df
     src_lbl  = "Data Bawaan Model" if _default else "Data Upload"
-
+    # CEK APAKAH ADA HASIL PREDIKSI CUSTOM
+    use_custom_forecast = (
+        st.session_state.get("custom_pred_vals") is not None
+        and st.session_state.get("custom_pred_dates") is not None
+    )
     st.markdown(f"""
     <div class='info-box'>
         📌 Sumber data: <b>{src_lbl}</b> ·
@@ -1874,12 +1879,29 @@ def page_prediksi():
             df_scaled = full_data_scaled.copy()
             df_feat   = full_data_raw.copy()
 
-        last_date    = pd.to_datetime(df_feat["ds"].max())
-        fut_dummy    = make_future_dummy(last_date, config["h"], config)
-        forecast     = nf.predict(df=df_scaled, futr_df=fut_dummy)
-        pred_vals    = scaler_y.inverse_transform(
-            forecast[["NBEATSx"]]).flatten()
-        future_dates = forecast["ds"].values
+        if use_custom_forecast:
+
+            pred_vals = st.session_state["custom_pred_vals"]
+            future_dates = st.session_state["custom_pred_dates"]
+
+        else:
+            last_date = pd.to_datetime(df_feat["ds"].max())
+            fut_dummy = make_future_dummy(
+                last_date,
+                config["h"],
+                config
+            )
+
+            forecast = nf.predict(
+                df=df_scaled,
+                futr_df=fut_dummy
+            )
+
+            pred_vals = scaler_y.inverse_transform(
+                forecast[["NBEATSx"]]
+            ).flatten()
+
+            future_dates = forecast["ds"].values
 
         # hist_y untuk display (skala asli / raw)
         if not _default:
@@ -1892,6 +1914,11 @@ def page_prediksi():
 
         hist_ds  = pd.to_datetime(df_feat["ds"].values)
         data_ok  = True
+        if use_custom_forecast:
+            st.success(
+                "Menggunakan hasil prediksi kustom terakhir."
+            )
+            st.write("DEBUG:", future_dates)
     except Exception as e:
         import traceback
         st.error(f"❌ Error prediksi: {e}")
