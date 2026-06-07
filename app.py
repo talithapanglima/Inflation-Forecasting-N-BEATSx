@@ -952,7 +952,7 @@ def page_upload():
                     # ── Proses sekarang: build features + scale → simpan ke session_state
                     # Ini memastikan df_scaled selalu konsisten dengan data yang diunggah
                     try:
-                        _nf, _sy, _se, _bp, _cfg, _fds, _fdr = load_artifacts()
+                        _nf, _nf_trend, _nf_season_, _sy, _se, _bp, _cfg, _fds, _fdr = load_artifacts()
                         _df_feat = build_features(
                             raw[["ds","y","BI Rate","Harga Minyak Dunia","Kurs USD/IDR"]].copy(),
                             _cfg)
@@ -1074,7 +1074,7 @@ def page_upload():
     )
 
     try:
-        nf, nf_trend, nf_season, scaler_y, scaler_exog, best, config,full_data_scaled, full_data_raw = load_artifacts()
+        nf, nf_trend, nf_season, scaler_y, scaler_exog, best, config, full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
@@ -1484,7 +1484,7 @@ def page_visualisasi():
     """, unsafe_allow_html=True)
 
     try:
-        _, scaler_y, scaler_exog, _, config, full_data_scaled, full_data_raw = load_artifacts()
+        _, _, _, scaler_y, scaler_exog, _, config, full_data_scaled, full_data_raw = load_artifacts()
     except Exception as e:
         st.error(f"❌ Gagal memuat model: {e}")
         return
