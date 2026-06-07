@@ -1846,9 +1846,16 @@ def page_prediksi():
         pred_vals    = scaler_y.inverse_transform(
             forecast[["NBEATSx"]]).flatten()
         future_dates = forecast["ds"].values
-        hist_y       = df_feat["y"].values
-        hist_ds      = pd.to_datetime(df_feat["ds"].values)
-        data_ok      = True
+        # hist_y untuk display: inverse transform ke skala asli
+        if not _default:
+            hist_y = scaler_y.inverse_transform(
+                df_scaled[["y"]].values).flatten()
+        else:
+            # full_data_scaled sudah dalam scaled, inverse untuk display
+            hist_y = scaler_y.inverse_transform(
+                df_feat[["y"]].values).flatten()
+        hist_ds  = pd.to_datetime(df_feat["ds"].values)
+        data_ok  = True
     except Exception as e:
         st.error(f"❌ Error prediksi: {e}")
         data_ok = False
@@ -1893,33 +1900,44 @@ def page_prediksi():
     with tab1:
         set_dark_style()
         fig, ax = plt.subplots(figsize=(12, 4.5))
-        n_show  = min(36, len(hist_y))
-        ax.plot(hist_ds[-n_show:], hist_y[-n_show:] * 100,
+
+        # Tampilkan 24 obs historis terakhir (dari data aktif)
+        n_show   = min(24, len(hist_y))
+        show_ds  = hist_ds[-n_show:]
+        show_y   = hist_y[-n_show:]
+
+        ax.plot(show_ds, show_y * 100,
                 color="#63B3ED", linewidth=1.8,
-                marker="o", markersize=3, label="Aktual", zorder=3)
-        ax.plot([hist_ds[-1], pd.to_datetime(future_dates[0])],
-                [hist_y[-1]*100, pred_vals[0]*100],
+                marker="o", markersize=3,
+                label=f"Aktual ({src_lbl})", zorder=3)
+        # Garis penghubung ke prediksi
+        ax.plot([show_ds[-1], pd.to_datetime(future_dates[0])],
+                [show_y[-1]*100, pred_vals[0]*100],
                 color="#F6AD55", linewidth=1.5, linestyle="--", alpha=0.6)
+        # Plot prediksi
         ax.plot(future_dates, pred_vals * 100,
                 color="#F6AD55", linewidth=2,
                 marker="s", markersize=5,
                 label="Prediksi N-BEATSx", zorder=4)
         ax.fill_between(future_dates,
-                        pred_vals*100*0.85, pred_vals*100*1.15,
-                        alpha=0.1, color="#F6AD55")
+                        pred_vals*100*0.9, pred_vals*100*1.1,
+                        alpha=0.1, color="#F6AD55",
+                        label="Interval ±10%")
         for d, v in zip(future_dates, pred_vals):
             ax.annotate(f"{v*100:.2f}%", xy=(d, v*100),
                         xytext=(0, 12), textcoords="offset points",
                         fontsize=7.5, color="#F6AD55",
                         ha="center", fontfamily="monospace")
-        ax.axvline(x=hist_ds[-1], color="#4A5568",
-                   linewidth=1, linestyle=":", alpha=0.8)
+        # Garis batas forecast
+        ax.axvline(x=show_ds[-1], color="#4A5568",
+                   linewidth=1, linestyle=":", alpha=0.8,
+                   label="Mulai Forecast")
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right")
         ax.set_ylabel("Inflasi (%)")
         ax.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x, _: f"{x:.1f}%"))
+            plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
         ax.legend(fontsize=9, framealpha=0.3,
                   facecolor="#1A202C", edgecolor="#2D3748")
         ax.grid(True, alpha=0.4)
@@ -1930,10 +1948,33 @@ def page_prediksi():
         st.pyplot(fig)
         plt.close()
 
+        # Info sumber data
+        if not _default:
+            st.markdown(
+                f"""<div class="success-box">
+                    ✅ Prediksi dihasilkan dari <b>data upload</b> kamu
+                    ({len(hist_y)} observasi,
+                    {hist_ds[0].strftime("%b %Y")} –
+                    {hist_ds[-1].strftime("%b %Y")}).
+                    Grafik menampilkan 24 observasi terakhir sebagai konteks historis.
+                </div>""",
+                unsafe_allow_html=True
+            )
+
     # ════════════════════════════════════════════════════════
     # TAB 2 — TABEL HASIL
     # ════════════════════════════════════════════════════════
     with tab2:
+        if not _default:
+            st.markdown(
+                f"""<div class="info-box">
+                    Prediksi dihasilkan dari <b>data upload</b>
+                    ({hist_ds[0].strftime("%b %Y")} –
+                    {hist_ds[-1].strftime("%b %Y")},
+                    {len(hist_y)} observasi).
+                    Model menggunakan 24 observasi terakhir sebagai window input.
+                </div>""",
+                unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(
@@ -2411,7 +2452,6 @@ def page_prediksi():
             ("N-BEATSx + BO ★","0.00601","0.00834","41.76%", True),
             ("Prophet",         "0.00487","0.00592","43.96%", False),
             ("SARIMAX",         "0.00717","0.00905","46.40%", False),
-            ("N-BEATSx Default","0.00530","0.00726","40.72%", False),
             ("N-BEATS",         "0.01039","0.01223","62.34%", False),
         ]
         rows_c = ""
