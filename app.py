@@ -383,8 +383,8 @@ def page_home():
                 Sistem prediksi inflasi berbasis model
                 <b style="color:#63B3ED;">N-BEATSx</b>
                 yang dioptimasi dengan
-                <b style="color:#68D391;">Bayesian Optimization</b>
-                dua tahap. Model mengintegrasikan variabel makroekonomi — BI Rate,
+                <b style="color:#68D391;">Bayesian Optimization.</b>
+                Model mengintegrasikan variabel makroekonomi — BI Rate,
                 kurs USD/IDR, dan harga minyak dunia — serta efek kalender hari besar
                 keagamaan untuk menghasilkan prediksi inflasi Indonesia hingga
                 <b style="color:#F6AD55;">6 bulan ke depan</b>.
@@ -401,10 +401,6 @@ def page_home():
                 <span style="background:#3D2800;color:#F6AD55;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
                     Efek Kalender · Variabel Eksogen
-                </span>
-                <span style="background:#322659;color:#B794F4;padding:5px 14px;
-                             border-radius:20px;font-size:0.78rem;font-weight:600;">
-                    Jan 2010 – Sep 2025 · 189 Observasi
                 </span>
             </div>
         </div>
@@ -522,7 +518,7 @@ def page_home():
         residuals = [
             ("Rata-rata Residual",       "ē = −0.004927", "Tidak bias sistematis"),
             ("Normalitas (Shapiro-Wilk)","W=0.9152",      "p=0.2489 · Normal"),
-            ("Autokorelasi (Ljung-Box)", "Q=5.2282",      "p=0.5149 · Tidak autokor."),
+            ("Autokorelasi (Ljung-Box)", "Q=5.2282",      "p=0.5149 · Tidak autokorelasi."),
             ("Homoskedastisitas (BP)",   "LM=8.8344",     "p=0.2648 · Homoskedastis"),
         ]
         for test, stat, desc in residuals:
@@ -987,16 +983,20 @@ def page_upload():
                 }),
                 use_container_width=True, height=220
             )
-            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+            col_s1, col_s2 = st.columns(2)
             with col_s1:
                 st.metric("Total Baris", len(df_show))
             with col_s2:
-                st.metric("Periode Awal", df_show["ds"].min().strftime("%b %Y"))
+                st.metric("Data Inflasi Terakhir",
+                        f"{df_show['y'].iloc[-1]*100:.2f}%")
+
+            col_s3, col_s4 = st.columns(2)
             with col_s3:
-                st.metric("Periode Akhir", df_show["ds"].max().strftime("%b %Y"))
+                st.metric("Periode Awal",
+                        df_show["ds"].min().strftime("%b %Y"))
             with col_s4:
-                st.metric("Inflasi Terakhir",
-                          f"{df_show['y'].iloc[-1]*100:.2f}%")
+                st.metric("Periode Akhir",
+                        df_show["ds"].max().strftime("%b %Y"))
             if st.button("🗑️  Hapus & gunakan data bawaan",
                          use_container_width=True):
                 st.session_state.uploaded_df      = None
@@ -1039,7 +1039,7 @@ def page_upload():
                 {rows_fmt}
             </table>
             <div style="font-size:0.72rem;color:#4A5568;margin-top:6px;">
-                ✱ Wajib · Nama kolom tidak peka huruf besar/kecil
+                ✱ Wajib · Nama kolom harus sesuai
             </div>
             """,
             unsafe_allow_html=True
