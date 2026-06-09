@@ -346,9 +346,9 @@ with st.sidebar:
     for key, icon, label in pages:
         active = st.session_state.page == key
         btn_style = (
-            "background:#DBEAFE;color:#FFFFFF;"
+            "background:#1D4ED8;color:#FFFFFF;"
             if active else
-            "background:transparent;color:#64748B;"
+            "background:transparent;color:#CBD5EO;"
         )
         if st.sidebar.button(
             f"{icon}  {label}",
