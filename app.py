@@ -421,17 +421,17 @@ def page_home():
                 <b style="color:#D97706;">6 bulan ke depan</b>.
             </div>
             <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
-                <span style="background:#1A365D;color:#1D4ED8;padding:5px 14px;
+                <span style="background:#1A365D;color:#FFFFFF;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
                     N-BEATSx · Deep Learning
                 </span>
-                <span style="background:#1C4532;color:#059669;padding:5px 14px;
+                <span style="background:#1C4532;color:#FFFFFF;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
                     Bayesian Optimization · Optuna
                 </span>
-                <span style="background:#3D2800;color:#D97706;padding:5px 14px;
+                <span style="background:#3D2800;color:#FFFFFF;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
-                    Efek Kalender · Variabel Eksogen
+                    Variabel Makroekonomi · Efek Kalender
                 </span>
             </div>
         </div>
