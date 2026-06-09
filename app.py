@@ -345,6 +345,11 @@ with st.sidebar:
     ]
     for key, icon, label in pages:
         active = st.session_state.page == key
+        btn_style = (
+            "background:#1D4ED8;color:#FFFFFF;"
+            if active else
+            "background:transparent;color:#64748B;"
+        )
         if st.sidebar.button(
             f"{icon}  {label}",
             key=f"nav_{key}",
@@ -352,17 +357,6 @@ with st.sidebar:
         ):
             st.session_state.page = key
             st.rerun()
-    
-        # Highlight tombol navigasi aktif — biru solid + teks putih bold
-        _pidx = [p[0] for p in pages].index(st.session_state.page)             if st.session_state.page in [p[0] for p in pages] else 0
-        _active_css = "\n".join([
-            f"[data-testid='stSidebar'] .stButton:nth-of-type({i+1}) > button {{"
-            + ("background:#1D4ED8 !important;color:#FFFFFF !important;font-weight:700 !important;}"
-                if i == _pidx else
-                "background:transparent !important;color:#CBD5E0 !important;font-weight:600 !important;}")
-            for i in range(len(pages))
-    ])
-    st.markdown(f"<style>{_active_css}</style>", unsafe_allow_html=True)
 
     st.divider()
 
