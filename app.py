@@ -17,81 +17,108 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Paksa light theme untuk semua widget native Streamlit
+st.markdown("""
+<style>
+    /* Force Streamlit native widgets ke light mode */
+    [data-testid="stHeader"]       { background: #F8F9FC !important; }
+    [data-testid="stToolbar"]      { background: #F8F9FC !important; }
+    .stSelectbox > div > div,
+    .stNumberInput > div > div,
+    .stTextInput > div > div       { background: #FFFFFF !important; color: #1E293B !important;
+                                     border-color: #CBD5E0 !important; }
+    .stSlider > div                { color: #1E293B !important; }
+    [data-testid="stDataFrame"]    { background: #FFFFFF !important; }
+    .stDataFrame, .stTable         { color: #1E293B !important; }
+    div[data-testid="stMetricValue"]       { color: #1D4ED8 !important; }
+    div[data-testid="stMetricLabel"]       { color: #64748B !important; }
+    div[data-testid="stMetricDelta"]       { color: #059669 !important; }
+    [data-testid="stExpander"]     { background: #FFFFFF !important;
+                                     border: 1px solid #CBD5E0 !important; }
+    /* Sidebar text */
+    [data-testid="stSidebar"] *    { color: #1E293B !important; }
+    [data-testid="stSidebar"] .stButton > button { color: #FFFFFF !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ── Custom CSS ────────────────────────────────────────────────────
 st.markdown("""
+
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
     html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-    .stApp { background: #0F1117; color: #E8EAF0; }
+    .stApp { background: #F8F9FC; color: #1E293B; }
 
     .main-header {
-        background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 100%);
-        border: 1px solid #2D3748; border-radius: 16px;
+        background: linear-gradient(135deg,#EEF2FF 0%,#E0E7FF 100%);
+        border: 1px solid #CBD5E0; border-radius: 16px;
         padding: 2rem 2.5rem; margin-bottom: 1.5rem;
     }
     .main-title {
         font-family: 'Space Mono', monospace; font-size: 1.8rem;
-        font-weight: 700; color: #63B3ED; margin: 0;
+        font-weight: 700; color: #1D4ED8; margin: 0;
     }
-    .main-subtitle { color: #718096; font-size: 0.9rem; margin-top: 0.3rem; }
+    .main-subtitle { color: #64748B; font-size: 0.9rem; margin-top: 0.3rem; }
 
     .metric-card {
-        background: #1A202C; border: 1px solid #2D3748;
+        background: #FFFFFF; border: 1px solid #CBD5E0;
         border-radius: 12px; padding: 1.2rem 1.5rem;
         text-align: center; transition: border-color 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
-    .metric-card:hover { border-color: #63B3ED; }
+    .metric-card:hover { border-color: #1D4ED8; }
     .metric-label {
-        font-size: 0.75rem; color: #718096; font-weight: 500;
+        font-size: 0.75rem; color: #64748B; font-weight: 500;
         text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem;
     }
     .metric-value {
         font-family: 'Space Mono', monospace; font-size: 1.6rem;
-        font-weight: 700; color: #63B3ED;
+        font-weight: 700; color: #1D4ED8;
     }
-    .metric-sub { font-size: 0.72rem; color: #4A5568; margin-top: 0.2rem; }
+    .metric-sub { font-size: 0.72rem; color: #94A3B8; margin-top: 0.2rem; }
 
     .section-header {
         font-family: 'Space Mono', monospace; font-size: 0.85rem;
-        font-weight: 700; color: #63B3ED; text-transform: uppercase;
-        letter-spacing: 0.12em; border-bottom: 1px solid #2D3748;
+        font-weight: 700; color: #1D4ED8; text-transform: uppercase;
+        letter-spacing: 0.12em; border-bottom: 1px solid #CBD5E0;
         padding-bottom: 0.5rem; margin-bottom: 1rem;
     }
 
     .info-box {
-        background: #1A202C; border-left: 3px solid #63B3ED;
+        background: #DBEAFE; border-left: 3px solid #1D4ED8;
         border-radius: 0 8px 8px 0; padding: 0.8rem 1rem;
-        font-size: 0.85rem; color: #A0AEC0; margin: 0.5rem 0;
+        font-size: 0.85rem; color: #1E3A8A; margin: 0.5rem 0;
     }
     .warning-box {
-        background: #1A202C; border-left: 3px solid #F6AD55;
+        background: #FEF3C7; border-left: 3px solid #D97706;
         border-radius: 0 8px 8px 0; padding: 0.8rem 1rem;
-        font-size: 0.85rem; color: #A0AEC0; margin: 0.5rem 0;
+        font-size: 0.85rem; color: #92400E; margin: 0.5rem 0;
     }
     .success-box {
-        background: #1A202C; border-left: 3px solid #68D391;
+        background: #D1FAE5; border-left: 3px solid #059669;
         border-radius: 0 8px 8px 0; padding: 0.8rem 1rem;
-        font-size: 0.85rem; color: #A0AEC0; margin: 0.5rem 0;
+        font-size: 0.85rem; color: #065F46; margin: 0.5rem 0;
     }
     .error-box {
-        background: #1A202C; border-left: 3px solid #FC8181;
+        background: #FEF2F2; border-left: 3px solid #DC2626;
         border-radius: 0 8px 8px 0; padding: 0.8rem 1rem;
-        font-size: 0.85rem; color: #A0AEC0; margin: 0.5rem 0;
+        font-size: 0.85rem; color: #991B1B; margin: 0.5rem 0;
     }
 
     .pred-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
     .pred-table th {
-        background: #2D3748; color: #A0AEC0; font-weight: 600;
+        background: #F1F5F9; color: #475569; font-weight: 600;
         font-size: 0.75rem; text-transform: uppercase;
         letter-spacing: 0.06em; padding: 0.6rem 0.8rem; text-align: left;
+        border-bottom: 2px solid #CBD5E0;
     }
     .pred-table td {
-        padding: 0.55rem 0.8rem; border-bottom: 1px solid #1A202C;
-        color: #E8EAF0; font-family: 'Space Mono', monospace; font-size: 0.82rem;
+        padding: 0.55rem 0.8rem; border-bottom: 1px solid #E2E8F0;
+        color: #1E293B; font-family: 'Space Mono', monospace; font-size: 0.82rem;
     }
-    .pred-table tr:nth-child(even) td { background: #1A202C; }
-    .pred-table tr:hover td { background: #2D3748; }
+    .pred-table tr:nth-child(even) td { background: #F8FAFC; }
+    .pred-table tr:hover td { background: #DBEAFE; }
 
     /* Nav menu */
     .nav-btn {
@@ -100,79 +127,83 @@ st.markdown("""
         font-size: 0.85rem; font-weight: 500;
         cursor: pointer; transition: background 0.15s;
         border: none; text-align: left;
-        background: transparent; color: #718096;
+        background: transparent; color: #64748B;
     }
-    .nav-btn.active { background: #2D3748 !important; color: #63B3ED !important; }
+    .nav-btn.active { background: #DBEAFE !important; color: #1D4ED8 !important; }
 
-    [data-testid="stSidebar"] { background: #0D1117; border-right: 1px solid #2D3748; }
+    [data-testid="stSidebar"] { background: #EEF2FF; border-right: 1px solid #CBD5E0; }
 
     .stButton > button {
-        background: #2B6CB0; color: white; border: none;
+        background: #1D4ED8; color: white; border: none;
         border-radius: 8px; font-family: 'Plus Jakarta Sans', sans-serif;
         font-weight: 600; font-size: 0.875rem; padding: 0.5rem 1.5rem;
         transition: background 0.2s;
     }
-    .stButton > button:hover { background: #3182CE; }
+    .stButton > button:hover { background: #1E40AF; }
 
     [data-testid="stFileUploader"] {
-        background: #1A202C; border: 1px dashed #2D3748; border-radius: 12px;
+        background: #FFFFFF; border: 1px dashed #CBD5E0; border-radius: 12px;
     }
 
     .stTabs [data-baseweb="tab-list"] {
-        background: #1A202C; border-radius: 10px; padding: 4px; gap: 4px;
+        background: #F1F5F9; border-radius: 10px; padding: 4px; gap: 4px;
     }
     .stTabs [data-baseweb="tab"] {
-        background: transparent; color: #718096; border-radius: 7px;
+        background: transparent; color: #64748B; border-radius: 7px;
         font-family: 'Plus Jakarta Sans', sans-serif;
         font-size: 0.85rem; font-weight: 500;
     }
-    .stTabs [aria-selected="true"] { background: #2D3748 !important; color: #63B3ED !important; }
+    .stTabs [aria-selected="true"] { background: #FFFFFF !important; color: #1D4ED8 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 
-    hr { border-color: #2D3748; }
+    hr { border-color: #E2E8F0; }
 
     /* Home cards */
     .feature-card {
-        background: #1A202C; border: 1px solid #2D3748;
+        background: #FFFFFF; border: 1px solid #CBD5E0;
         border-radius: 12px; padding: 1.4rem 1.5rem;
         height: 100%; transition: border-color 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .feature-card:hover { border-color: #63B3ED; }
+    .feature-card:hover { border-color: #1D4ED8; }
     .feature-icon { font-size: 2rem; margin-bottom: 0.6rem; }
     .feature-title {
         font-family: 'Space Mono', monospace; font-size: 0.9rem;
-        font-weight: 700; color: #63B3ED; margin-bottom: 0.4rem;
+        font-weight: 700; color: #1D4ED8; margin-bottom: 0.4rem;
     }
-    .feature-desc { font-size: 0.83rem; color: #718096; line-height: 1.6; }
+    .feature-desc { font-size: 0.83rem; color: #475569; line-height: 1.6; }
 
     /* About card */
     .about-card {
-        background: #1A202C; border: 1px solid #2D3748;
+        background: #FFFFFF; border: 1px solid #CBD5E0;
         border-radius: 12px; padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .about-title {
         font-family: 'Space Mono', monospace; font-size: 0.85rem;
-        font-weight: 700; color: #63B3ED; margin-bottom: 0.6rem;
+        font-weight: 700; color: #1D4ED8; margin-bottom: 0.6rem;
         text-transform: uppercase; letter-spacing: 0.1em;
     }
-    .about-text { font-size: 0.85rem; color: #A0AEC0; line-height: 1.75; }
+    .about-text { font-size: 0.85rem; color: #475569; line-height: 1.75; }
 
     .badge {
         display: inline-block; padding: 2px 10px;
         border-radius: 20px; font-size: 0.72rem; font-weight: 600;
         margin: 2px;
     }
-    .badge-blue { background: #1A365D; color: #63B3ED; }
-    .badge-green { background: #1C4532; color: #68D391; }
-    .badge-yellow { background: #3D2800; color: #F6AD55; }
+    .badge-blue  { background: #DBEAFE;   color: #1D4ED8;   }
+    .badge-green { background: #D1FAE5;  color: #059669;  }
+    .badge-yellow{ background: #FEF3C7;  color: #D97706;  }
 
     .val-row {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 0.4rem 0; border-bottom: 1px solid #2D3748;
+        padding: 0.4rem 0; border-bottom: 1px solid #E2E8F0;
         font-size: 0.83rem;
     }
-    .val-key { color: #718096; }
-    .val-val { font-family: 'Space Mono', monospace; color: #E8EAF0; font-size: 0.8rem; }
+    .val-key { color: #64748B; }
+    .val-val { font-family: 'Space Mono', monospace; color: #1E293B; font-size: 0.8rem; }
 </style>
+
 """, unsafe_allow_html=True)
 
 
@@ -250,11 +281,11 @@ def make_future_dummy(last_date, h, config):
 
 def set_dark_style():
     plt.rcParams.update({
-        'figure.facecolor': '#0F1117', 'axes.facecolor': '#1A202C',
-        'axes.edgecolor':  '#2D3748', 'axes.labelcolor': '#A0AEC0',
-        'xtick.color': '#718096',     'ytick.color': '#718096',
-        'grid.color':  '#2D3748',     'grid.linestyle': '--',
-        'grid.alpha':  0.6,           'text.color': '#E8EAF0',
+        'figure.facecolor': '#F8F9FC', 'axes.facecolor': '#FFFFFF',
+        'axes.edgecolor':  '#CBD5E0', 'axes.labelcolor': '#475569',
+        'xtick.color': '#64748B',     'ytick.color': '#64748B',
+        'grid.color':  '#E2E8F0',     'grid.linestyle': '--',
+        'grid.alpha':  0.8,           'text.color': '#1E293B',
         'font.family': 'monospace',
     })
 
@@ -292,10 +323,10 @@ with st.sidebar:
     st.markdown("""
     <div style='padding:1rem 0 0.5rem'>
         <div style='font-family:Space Mono,monospace;font-size:1.1rem;
-                    font-weight:700;color:#63B3ED;letter-spacing:1px;'>
+                    font-weight:700;color:#1D4ED8;letter-spacing:1px;'>
             INFLASI.N-BEATSx
         </div>
-        <div style='font-size:0.72rem;color:#4A5568;margin-top:2px;'>
+        <div style='font-size:0.72rem;color:#94A3B8;margin-top:2px;'>
             N-BEATSx + Bayesian Optimization
         </div>
     </div>
@@ -315,9 +346,9 @@ with st.sidebar:
     for key, icon, label in pages:
         active = st.session_state.page == key
         btn_style = (
-            "background:#2D3748;color:#63B3ED;"
+            "background:#DBEAFE;color:#1D4ED8;"
             if active else
-            "background:transparent;color:#718096;"
+            "background:transparent;color:#64748B;"
         )
         if st.sidebar.button(
             f"{icon}  {label}",
@@ -336,7 +367,7 @@ with st.sidebar:
         <div class='success-box'>
             ✅ <b>Data aktif</b><br>
             {len(df_up)} baris · {len(df_up.columns)} kolom<br>
-            <span style='font-size:0.75rem;color:#4A5568;'>
+            <span style='font-size:0.75rem;color:#94A3B8;'>
                 {pd.to_datetime(df_up['ds'].min()).strftime('%b %Y')} –
                 {pd.to_datetime(df_up['ds'].max()).strftime('%b %Y')}
             </span>
@@ -359,8 +390,8 @@ def page_home():
     # ── Hero Section ──────────────────────────────────────────────
     st.markdown(
         """
-        <div style="background:linear-gradient(135deg,#0d1117 0%,#1a1f2e 60%,#0d1117 100%);
-                    border:1px solid #2D3748;border-radius:20px;
+        <div style="background:linear-gradient(135deg,#EEF2FF 0%,#E0E7FF 60%,#EEF2FF 100%);
+                    border:1px solid #CBD5E0;border-radius:20px;
                     padding:3rem 3rem 2.5rem;margin-bottom:1.5rem;position:relative;overflow:hidden;">
             <div style="position:absolute;top:-60px;right:-60px;width:320px;height:320px;
                         background:radial-gradient(circle,rgba(99,179,237,0.07) 0%,transparent 70%);"></div>
@@ -370,35 +401,35 @@ def page_home():
                 <div style="font-size:2.8rem;">📈</div>
                 <div>
                     <div style="font-family:Space Mono,monospace;font-size:2rem;
-                                font-weight:700;color:#63B3ED;letter-spacing:-0.5px;line-height:1.1;">
+                                font-weight:700;color:#1D4ED8;letter-spacing:-0.5px;line-height:1.1;">
                         INFLASI.N-BEATSx
                     </div>
-                    <div style="font-size:0.85rem;color:#4A5568;margin-top:4px;
+                    <div style="font-size:0.85rem;color:#94A3B8;margin-top:4px;
                                 font-weight:400;letter-spacing:0.05em;">
                         SISTEM PREDIKSI INFLASI INDONESIA
                     </div>
                 </div>
             </div>
-            <div style="font-size:1rem;color:#A0AEC0;line-height:1.8;max-width:680px;margin-bottom:2rem;">
+            <div style="font-size:1rem;color:#475569;line-height:1.8;max-width:680px;margin-bottom:2rem;">
                 Sistem prediksi inflasi berbasis model
-                <b style="color:#63B3ED;">N-BEATSx</b>
+                <b style="color:#1D4ED8;">N-BEATSx</b>
                 yang dioptimasi dengan
-                <b style="color:#68D391;">Bayesian Optimization.</b>
+                <b style="color:#059669;">Bayesian Optimization.</b>
                 Model mengintegrasikan variabel makroekonomi — BI Rate,
                 kurs USD/IDR, dan harga minyak dunia — serta efek kalender hari besar
                 keagamaan untuk menghasilkan prediksi inflasi Indonesia hingga
-                <b style="color:#F6AD55;">6 bulan ke depan</b>.
+                <b style="color:#D97706;">6 bulan ke depan</b>.
             </div>
             <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
-                <span style="background:#1A365D;color:#63B3ED;padding:5px 14px;
+                <span style="background:#1A365D;color:#1D4ED8;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
                     N-BEATSx · Deep Learning
                 </span>
-                <span style="background:#1C4532;color:#68D391;padding:5px 14px;
+                <span style="background:#1C4532;color:#059669;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
                     Bayesian Optimization · Optuna
                 </span>
-                <span style="background:#3D2800;color:#F6AD55;padding:5px 14px;
+                <span style="background:#3D2800;color:#D97706;padding:5px 14px;
                              border-radius:20px;font-size:0.78rem;font-weight:600;">
                     Efek Kalender · Variabel Eksogen
                 </span>
@@ -415,11 +446,11 @@ def page_home():
     )
     k1, k2, k3, k4, k5 = st.columns(5)
     kpis = [
-        ("MAE",     "0.00601", "Mean Absolute Error",     "#63B3ED"),
-        ("RMSE",    "0.00834", "Root Mean Squared Error", "#63B3ED"),
-        ("SMAPE",   "41.76%",  "Symmetric MAPE",          "#F6AD55"),
+        ("MAE",     "0.00601", "Mean Absolute Error",     "#1D4ED8"),
+        ("RMSE",    "0.00834", "Root Mean Squared Error", "#1D4ED8"),
+        ("SMAPE",   "41.76%",  "Symmetric MAPE",          "#D97706"),
         ("Horizon", "6 Bulan", "Prediksi ke depan",       "#68D391"),
-        ("Obs.",    "189",     "Data bulanan",             "#B794F4"),
+        ("Obs.",    "189",     "Data bulanan",             "#7C3AED"),
     ]
     for col, (label, val, sub, color) in zip([k1, k2, k3, k4, k5], kpis):
         with col:
@@ -433,7 +464,7 @@ def page_home():
                 unsafe_allow_html=True
             )
     st.markdown(
-        """<div style="font-size:0.75rem;color:#4A5568;margin-top:6px;margin-bottom:1.5rem;">
+        """<div style="font-size:0.75rem;color:#94A3B8;margin-top:6px;margin-bottom:1.5rem;">
             * SMAPE dipengaruhi anomali deflasi Februari 2025 (−0.09%).
             Pada bulan normal SMAPE berkisar 6–25%.
         </div>""",
@@ -457,10 +488,10 @@ def page_home():
         rows_comp = ""
         for model, mae, rmse, smape, is_ours in comp:
             if is_ours:
-                std = "color:#63B3ED;font-weight:700;"
+                std = "color:#1D4ED8;font-weight:700;"
                 sbg = "background:#0d1a2e;"
             else:
-                std = "color:#A0AEC0;"
+                std = "color:#475569;"
                 sbg = ""
             rows_comp += (
                 f"<tr style=\"{sbg}\">"
@@ -476,7 +507,7 @@ def page_home():
                 <tr><th>Model</th><th>MAE ↓</th><th>RMSE ↓</th><th>SMAPE ↓</th></tr>
                 {rows_comp}
             </table>
-            <div style="font-size:0.73rem;color:#4A5568;margin-top:6px;">
+            <div style="font-size:0.73rem;color:#94A3B8;margin-top:6px;">
                 ↓ = semakin kecil semakin baik &nbsp;·&nbsp; ★ = model yang dikembangkan
             </div>""",
             unsafe_allow_html=True
@@ -488,10 +519,10 @@ def page_home():
             unsafe_allow_html=True
         )
         var_groups = [
-            ("🎯 Target",          [("Inflasi Bulanan (y)",)], "#63B3ED", "#1A365D"),
-            ("📉 Lag Inflasi",     [("lag1",),("lag3",),("lag6",),("lag12",)], "#68D391","#1C4532"),
-            ("🌐 Eksogen Historis",[("BI Rate",),("Harga Minyak Dunia",),("Kurs USD/IDR",)],"#F6AD55","#3D2800"),
-            ("📅 Dummy Kalender",  [("Ramadan",),("Idulfitri",),("Natal",),("Imlek",)], "#B794F4","#322659"),
+            ("🎯 Target",          [("Inflasi Bulanan (y)",)], "#1D4ED8", "#DBEAFE"),
+            ("📉 Lag Inflasi",     [("lag1",),("lag3",),("lag6",),("lag12",)], "#059669","#D1FAE5"),
+            ("🌐 Eksogen Historis",[("BI Rate",),("Harga Minyak Dunia",),("Kurs USD/IDR",)],"#D97706","#FEF3C7"),
+            ("📅 Dummy Kalender",  [("Ramadan",),("Idulfitri",),("Natal",),("Imlek",)], "#7C3AED","#EDE9FE"),
         ]
         for group, items, color, bg in var_groups:
             badges = " ".join([
@@ -502,7 +533,7 @@ def page_home():
             ])
             st.markdown(
                 f"""<div style="margin-bottom:0.8rem;">
-                    <div style="font-size:0.73rem;color:#4A5568;font-weight:600;
+                    <div style="font-size:0.73rem;color:#94A3B8;font-weight:600;
                                 text-transform:uppercase;letter-spacing:0.08em;
                                 margin-bottom:5px;">{group}</div>
                     {badges}
@@ -523,13 +554,13 @@ def page_home():
         ]
         for test, stat, desc in residuals:
             st.markdown(
-                f"""<div style="background:#1A202C;border:1px solid #2D3748;
+                f"""<div style="background:#FFFFFF;border:1px solid #CBD5E0;
                             border-radius:8px;padding:0.55rem 0.9rem;
                             margin-bottom:0.45rem;display:flex;gap:0.6rem;align-items:center;">
                     <div style="font-size:0.95rem;">✅</div>
                     <div style="flex:1;">
-                        <div style="font-size:0.77rem;font-weight:600;color:#E8EAF0;">{test}</div>
-                        <div style="font-family:Space Mono,monospace;font-size:0.7rem;color:#63B3ED;">
+                        <div style="font-size:0.77rem;font-weight:600;color:#1E293B;">{test}</div>
+                        <div style="font-family:Space Mono,monospace;font-size:0.7rem;color:#1D4ED8;">
                             {stat} &nbsp;·&nbsp; {desc}
                         </div>
                     </div>
@@ -562,7 +593,7 @@ def page_home():
                 f"""<div class="feature-card" style="position:relative;">
                     <div style="position:absolute;top:1rem;right:1rem;
                                 font-family:Space Mono,monospace;
-                                font-size:0.7rem;color:#2D3748;font-weight:700;">{num}</div>
+                                font-size:0.7rem;color:#1E293B;font-weight:700;">{num}</div>
                     <div style="font-size:2rem;margin-bottom:0.5rem;">{icon}</div>
                     <div class="feature-title">{title}</div>
                     <div class="feature-desc">{desc}</div>
@@ -582,17 +613,17 @@ def page_home():
 
     # ── Footer ────────────────────────────────────────────────────
     st.markdown(
-        """<div style="background:#1A202C;border:1px solid #2D3748;border-radius:12px;
+        """<div style="background:#FFFFFF;border:1px solid #CBD5E0;border-radius:12px;
                     padding:1.2rem 1.5rem;display:flex;gap:1rem;align-items:flex-start;">
             <div style="font-size:1.3rem;">ℹ️</div>
             <div>
-                <div style="font-size:0.85rem;font-weight:600;color:#E8EAF0;margin-bottom:4px;">
+                <div style="font-size:0.85rem;font-weight:600;color:#1E293B;margin-bottom:4px;">
                     Cara Mulai
                 </div>
-                <div style="font-size:0.82rem;color:#718096;line-height:1.7;">
-                    Klik <b style="color:#63B3ED;">Upload Data</b> di sidebar kiri
+                <div style="font-size:0.82rem;color:#64748B;line-height:1.7;">
+                    Klik <b style="color:#1D4ED8;">Upload Data</b> di sidebar kiri
                     untuk mengunggah data historis terbaru, lalu buka halaman
-                    <b style="color:#63B3ED;">Prediksi Inflasi</b> untuk melihat
+                    <b style="color:#1D4ED8;">Prediksi Inflasi</b> untuk melihat
                     proyeksi 6 bulan ke depan. Jika tidak ada data yang diunggah,
                     sistem menggunakan data bawaan model (Jan 2010 – Sep 2025) secara otomatis.
                 </div>
@@ -706,7 +737,7 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     dc1, dc2, dc3 = st.columns(3)
     for col, (lbl, val, color, desc) in zip(
         [dc1, dc2, dc3],
-        [("Proporsi Trend",       f"{avg_t:.1f}%", "#68D391",
+        [("Proporsi Trend",       f"{avg_t:.1f}%", "#059669",
           "Stack Trend (Blok 0–2)"),
          ("Proporsi Seasonality", f"{avg_s:.1f}%", "#F6AD55",
           "Stack Seasonality (Blok 3–5)"),
@@ -735,10 +766,10 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     fig1, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
     fig1.suptitle(
         f"Dekomposisi Komponen N-BEATSx — {label}",
-        fontsize=10, color="#E8EAF0", fontfamily="monospace", y=1.01
+        fontsize=10, color="#1E293B", fontfamily="monospace", y=1.01
     )
     comp_cfg = [
-        (axes[0], trend_v,  "#68D391", "Trend (Stack 0–2)"),
+        (axes[0], trend_v,  "#059669", "Trend (Stack 0–2)"),
         (axes[1], season_v, "#F6AD55", "Seasonality (Stack 3–5)"),
         (axes[2], exog_v,   "#63B3ED",
          "Eksogen (BI Rate, Harga Minyak, Kurs USD/IDR, Lag Inflasi)"),
@@ -759,7 +790,7 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
         ax.set_title(title, fontsize=8.5, color=color,
                      pad=4, fontfamily="monospace")
         ax.grid(True, alpha=0.3)
-        ax.axhline(0, color="#4A5568", linewidth=0.8, linestyle="--")
+        ax.axhline(0, color="#94A3B8", linewidth=0.8, linestyle="--")
         ax.yaxis.set_major_formatter(
             plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
 
@@ -782,14 +813,14 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     width = 0.25
 
     bar_t = ax2.bar(x - width, [p[0] for p in props],
-                    width, label="Trend", color="#68D391", alpha=0.85)
+                    width, label="Trend", color="#059669", alpha=0.85)
     bar_s = ax2.bar(x,         [p[1] for p in props],
                     width, label="Seasonality", color="#F6AD55", alpha=0.85)
     bar_e = ax2.bar(x + width, [p[2] for p in props],
                     width, label="Eksogen", color="#63B3ED", alpha=0.85)
 
     for bars, color in [(bar_t, "#68D391"),
-                        (bar_s, "#F6AD55"),
+                        (bar_s, "#D97706"),
                         (bar_e, "#63B3ED")]:
         for bar in bars:
             h = bar.get_height()
@@ -808,11 +839,11 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     ax2.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda x, _: f"{x:.0f}%"))
     ax2.legend(fontsize=9, framealpha=0.3,
-               facecolor="#1A202C", edgecolor="#2D3748")
+               facecolor="#FFFFFF", edgecolor="#CBD5E0")
     ax2.grid(True, alpha=0.3, axis="y")
     ax2.set_title(
         "Proporsi Kontribusi Komponen per Periode",
-        fontsize=10, pad=10, color="#E8EAF0", fontfamily="monospace"
+        fontsize=10, pad=10, color="#1E293B", fontfamily="monospace"
     )
     plt.tight_layout()
     st.pyplot(fig2)
@@ -831,14 +862,14 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
         rows_d += (
             f"<tr>"
             f"<td>{d.strftime('%B %Y')}</td>"
-            f"<td style='color:#63B3ED;font-weight:600;'>"
+            f"<td style='color:#1D4ED8;font-weight:600;'>"
             f"  {total_v[i]*100:.4f}%</td>"
-            f"<td style='color:#68D391;'>{trend_v[i]*100:.4f}%</td>"
-            f"<td style='color:#F6AD55;'>{season_v[i]*100:.4f}%</td>"
-            f"<td style='color:#63B3ED;'>{exog_v[i]*100:.4f}%</td>"
-            f"<td style='color:#68D391;'>{pr_t:.1f}%</td>"
-            f"<td style='color:#F6AD55;'>{pr_s:.1f}%</td>"
-            f"<td style='color:#63B3ED;'>{pr_e:.1f}%</td>"
+            f"<td style='color:#059669;'>{trend_v[i]*100:.4f}%</td>"
+            f"<td style='color:#D97706;'>{season_v[i]*100:.4f}%</td>"
+            f"<td style='color:#1D4ED8;'>{exog_v[i]*100:.4f}%</td>"
+            f"<td style='color:#059669;'>{pr_t:.1f}%</td>"
+            f"<td style='color:#D97706;'>{pr_s:.1f}%</td>"
+            f"<td style='color:#1D4ED8;'>{pr_e:.1f}%</td>"
             f"</tr>"
         )
     st.markdown(
@@ -855,16 +886,16 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
 
     # Rata-rata
     st.markdown(
-        f"""<div style="background:#1A202C;border:1px solid #2D3748;
+        f"""<div style="background:#FFFFFF;border:1px solid #CBD5E0;
                     border-radius:8px;padding:0.75rem 1rem;margin-top:0.75rem;
-                    font-size:0.82rem;color:#A0AEC0;line-height:1.8;">
-            <b style="color:#E8EAF0;">Rata-rata Kontribusi per Komponen:</b><br>
-            Trend: <b style="color:#68D391;">{np.mean(trend_v)*100:.4f}%</b>
+                    font-size:0.82rem;color:#475569;line-height:1.8;">
+            <b style="color:#1E293B;">Rata-rata Kontribusi per Komponen:</b><br>
+            Trend: <b style="color:#059669;">{np.mean(trend_v)*100:.4f}%</b>
             ({avg_t:.1f}%) &nbsp;·&nbsp;
-            Seasonality: <b style="color:#F6AD55;">
+            Seasonality: <b style="color:#D97706;">
             {np.mean(season_v)*100:.4f}%</b>
             ({avg_s:.1f}%) &nbsp;·&nbsp;
-            Eksogen: <b style="color:#63B3ED;">
+            Eksogen: <b style="color:#1D4ED8;">
             {np.mean(exog_v)*100:.4f}%</b>
             ({avg_e:.1f}%)
         </div>""",
@@ -1018,18 +1049,18 @@ def page_upload():
             ("Harga Minyak Dunia",        "Eksogen", "USD/barel"),
             ("Kurs USD/IDR",              "Eksogen", "Nilai tukar"),
         ]
-        badge_map = {"Waktu": "#3D2800|#F6AD55",
-                     "Target": "#1A365D|#63B3ED",
-                     "Eksogen": "#1C4532|#68D391"}
+        badge_map = {"Waktu": "#FEF3C7|#D97706",
+                     "Target": "#DBEAFE|#1D4ED8",
+                     "Eksogen": "#D1FAE5|#059669"}
         rows_fmt = ""
         for name, tipe, fmt in cols_info:
             bg, fg = badge_map[tipe].split("|")
             rows_fmt += (
                 f"<tr>"
-                f"<td><code style='color:#63B3ED;font-size:0.78rem;'>{name}</code> ✱</td>"
+                f"<td><code style='color:#1D4ED8;font-size:0.78rem;'>{name}</code> ✱</td>"
                 f"<td><span style='background:{bg};color:{fg};padding:2px 8px;"
                 f"border-radius:10px;font-size:0.72rem;font-weight:600;'>{tipe}</span></td>"
-                f"<td style='color:#718096;font-size:0.77rem;'>{fmt}</td>"
+                f"<td style='color:#64748B;font-size:0.77rem;'>{fmt}</td>"
                 f"</tr>"
             )
         st.markdown(
@@ -1038,7 +1069,7 @@ def page_upload():
                 <tr><th>Nama Kolom</th><th>Tipe</th><th>Format</th></tr>
                 {rows_fmt}
             </table>
-            <div style="font-size:0.72rem;color:#4A5568;margin-top:6px;">
+            <div style="font-size:0.72rem;color:#94A3B8;margin-top:6px;">
                 ✱ Wajib · Nama kolom harus sesuai
             </div>
             """,
@@ -1139,7 +1170,7 @@ def page_upload():
         row = st.columns([1.6, 1, 1, 1])
         row[0].markdown(
             f"<div style='padding:0.5rem 0;font-size:0.85rem;"
-            f"font-weight:600;color:#E8EAF0;'>"
+            f"font-weight:600;color:#1E293B;'>"
             f"{fdate.strftime('%B %Y')}</div>",
             unsafe_allow_html=True
         )
@@ -1189,7 +1220,7 @@ def page_upload():
         row   = st.columns([1.6, 1, 1, 1, 1])
         row[0].markdown(
             f"<div style='padding:0.5rem 0;font-size:0.85rem;"
-            f"font-weight:600;color:#E8EAF0;'>"
+            f"font-weight:600;color:#1E293B;'>"
             f"{fdate.strftime('%B %Y')}</div>",
             unsafe_allow_html=True
         )
@@ -1295,7 +1326,7 @@ def page_upload():
             # Metrik ringkas
             mc1, mc2, mc3, mc4 = st.columns(4)
             trend_dir = "↑ Naik" if pred_vals[-1] > pred_vals[0] else "↓ Turun"
-            trend_col = "#68D391" if pred_vals[-1] > pred_vals[0] else "#FC8181"
+            trend_col = "#059669" if pred_vals[-1] > pred_vals[0] else "#FC8181"
             for col, (lbl, val) in zip(
                 [mc1, mc2, mc3, mc4],
                 [("Prediksi Bulan 1",
@@ -1350,7 +1381,7 @@ def page_upload():
                         ha="center", fontfamily="monospace"
                     )
                 ax.axvline(x=pd.to_datetime(last_date),
-                           color="#4A5568", linewidth=1,
+                           color="#94A3B8", linewidth=1,
                            linestyle=":", alpha=0.8)
                 ax.set_ylabel("Inflasi (%)")
                 ax.yaxis.set_major_formatter(
@@ -1361,11 +1392,11 @@ def page_upload():
                 plt.setp(ax.xaxis.get_majorticklabels(),
                          rotation=30, ha="right")
                 ax.legend(fontsize=9, framealpha=0.3,
-                          facecolor="#1A202C", edgecolor="#2D3748")
+                          facecolor="#FFFFFF", edgecolor="#CBD5E0")
                 ax.grid(True, alpha=0.4)
                 ax.set_title(
                     "Prediksi Inflasi Kustom — N-BEATSx",
-                    fontsize=10, pad=10, color="#E8EAF0",
+                    fontsize=10, pad=10, color="#1E293B",
                     fontfamily="monospace"
                 )
                 plt.tight_layout()
@@ -1449,9 +1480,9 @@ def page_upload():
                 """<div class="info-box">
                     Dekomposisi prediksi kustom berdasarkan nilai eksogen
                     yang Anda masukkan. Komponen
-                    <b style="color:#68D391;">Trend</b>,
-                    <b style="color:#F6AD55;">Seasonality</b>, dan
-                    <b style="color:#63B3ED;">Eksogen</b> (BI Rate,
+                    <b style="color:#059669;">Trend</b>,
+                    <b style="color:#D97706;">Seasonality</b>, dan
+                    <b style="color:#1D4ED8;">Eksogen</b> (BI Rate,
                     harga minyak, kurs, lag inflasi).
                 </div>""",
                 unsafe_allow_html=True
@@ -1532,10 +1563,10 @@ def page_visualisasi():
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha='right')
         ax.legend(fontsize=9, framealpha=0.3,
-                  facecolor='#1A202C', edgecolor='#2D3748')
+                  facecolor='#FFFFFF', edgecolor='#CBD5E0')
         ax.grid(True, alpha=0.4)
         ax.set_title('Inflasi Indonesia — Data Historis',
-                     fontsize=11, pad=12, color='#E8EAF0',
+                     fontsize=11, pad=12, color='#1E293B',
                      fontfamily='monospace')
         plt.tight_layout()
         st.pyplot(fig)
@@ -1578,7 +1609,7 @@ def page_visualisasi():
             ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
             plt.setp(ax2.xaxis.get_majorticklabels(), rotation=30, ha='right')
             ax2.grid(True, alpha=0.4)
-            ax2.set_title(var, fontsize=10, pad=8, color='#E8EAF0',
+            ax2.set_title(var, fontsize=10, pad=8, color='#1E293B',
                           fontfamily='monospace')
             plt.tight_layout()
             st.pyplot(fig2)
@@ -1654,9 +1685,9 @@ def page_about():
                         align-items:flex-start;'>
                 <div style='font-family:Space Mono,monospace;
                             font-size:0.8rem;font-weight:700;
-                            color:#63B3ED;padding-top:2px;
+                            color:#1D4ED8;padding-top:2px;
                             min-width:24px;'>{num}</div>
-                <div style='font-size:0.84rem;color:#A0AEC0;
+                <div style='font-size:0.84rem;color:#475569;
                             line-height:1.65;'>{desc}</div>
             </div>""", unsafe_allow_html=True)
 
@@ -1703,7 +1734,7 @@ def page_about():
             ])
             st.markdown(f"""
             <div style='margin-bottom:0.6rem;'>
-                <div style='font-size:0.72rem;color:#4A5568;
+                <div style='font-size:0.72rem;color:#94A3B8;
                             text-transform:uppercase;letter-spacing:0.08em;
                             margin-bottom:4px;'>{group}</div>
                 {badges}
@@ -1724,7 +1755,7 @@ def page_about():
             st.markdown(f"""
             <div style='display:flex;gap:0.75rem;margin-bottom:0.7rem;'>
                 <div style='font-size:1.1rem;'>{icon}</div>
-                <div style='font-size:0.82rem;color:#A0AEC0;
+                <div style='font-size:0.82rem;color:#475569;
                             line-height:1.65;'>{desc}</div>
             </div>""", unsafe_allow_html=True)
 
@@ -1867,7 +1898,7 @@ def page_prediksi():
     # ── KPI cards ─────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
     td = "↑" if pred_vals[-1] > pred_vals[0] else "↓"
-    tc = "#68D391" if pred_vals[-1] > pred_vals[0] else "#FC8181"
+    tc = "#059669" if pred_vals[-1] > pred_vals[0] else "#FC8181"
     for col, (lbl, val, sub) in zip(
         [c1, c2, c3, c4],
         [("Prediksi Bulan Pertama",
@@ -1930,7 +1961,7 @@ def page_prediksi():
                         fontsize=7.5, color="#F6AD55",
                         ha="center", fontfamily="monospace")
         # Garis batas forecast
-        ax.axvline(x=show_ds[-1], color="#4A5568",
+        ax.axvline(x=show_ds[-1], color="#94A3B8",
                    linewidth=1, linestyle=":", alpha=0.8,
                    label="Mulai Forecast")
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
@@ -1940,11 +1971,11 @@ def page_prediksi():
         ax.yaxis.set_major_formatter(
             plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
         ax.legend(fontsize=9, framealpha=0.3,
-                  facecolor="#1A202C", edgecolor="#2D3748")
+                  facecolor="#FFFFFF", edgecolor="#CBD5E0")
         ax.grid(True, alpha=0.4)
         ax.set_title(
             f"Prediksi Inflasi Indonesia — N-BEATSx ({src_lbl})",
-            fontsize=11, pad=12, color="#E8EAF0", fontfamily="monospace")
+            fontsize=11, pad=12, color="#1E293B", fontfamily="monospace")
         plt.tight_layout()
         st.pyplot(fig)
         plt.close()
@@ -1984,7 +2015,7 @@ def page_prediksi():
             rows_p = ""
             for i, (d, v) in enumerate(zip(future_dates, pred_vals)):
                 pct  = v * 100
-                clr  = "#68D391" if pct < 3 else                        "#F6AD55" if pct < 5 else "#FC8181"
+                clr  = "#059669" if pct < 3 else                        "#F6AD55" if pct < 5 else "#FC8181"
                 cat  = "Rendah ✓" if pct < 3 else                        "Moderat"  if pct < 5 else "Tinggi ⚠"
                 rows_p += (
                     f"<tr><td>{i+1}</td>"
@@ -2081,7 +2112,7 @@ def page_prediksi():
             dm1, dm2, dm3 = st.columns(3)
             for col_, (lbl, val, clr, desc) in zip(
                 [dm1, dm2, dm3],
-                [("Proporsi Tren",    f"{avg_t:.2f}%", "#68D391",
+                [("Proporsi Tren",    f"{avg_t:.2f}%", "#059669",
                   "Stack Trend (Blok 0–2)"),
                  ("Proporsi Musiman", f"{avg_s:.2f}%", "#F6AD55",
                   "Stack Seasonality (Blok 3–5)"),
@@ -2122,11 +2153,11 @@ def page_prediksi():
             ax0d.yaxis.set_major_formatter(
                 plt.FuncFormatter(lambda x, _: f"{x:.3f}%"))
             ax0d.legend(fontsize=9, framealpha=.3,
-                        facecolor="#1A202C", edgecolor="#2D3748")
+                        facecolor="#FFFFFF", edgecolor="#CBD5E0")
             ax0d.grid(True, alpha=.4)
 
             for ax_, col_, clr_, title_ in [
-                (axes_d[1], "trend_orig",       "#68D391",
+                (axes_d[1], "trend_orig",       "#059669",
                  "Komponen Trend"),
                 (axes_d[2], "seasonality_orig", "#F6AD55",
                  "Komponen Seasonality (Termasuk Efek Kalender)"),
@@ -2135,11 +2166,11 @@ def page_prediksi():
                          "o-", color=clr_, lw=1.8, ms=4, label=col_.split("_")[0].title())
                 ax_.fill_between(ds_vals, decomp_df[col_], 0,
                                  alpha=0.12, color=clr_)
-                ax_.axhline(y=0, color="#4A5568", lw=0.8, ls=":")
+                ax_.axhline(y=0, color="#94A3B8", lw=0.8, ls=":")
                 ax_.set_title(title_, fontsize=10, pad=8)
                 ax_.set_ylabel("Kontribusi", fontsize=9)
                 ax_.legend(fontsize=9, framealpha=.3,
-                           facecolor="#1A202C", edgecolor="#2D3748")
+                           facecolor="#FFFFFF", edgecolor="#CBD5E0")
                 ax_.grid(True, alpha=.4)
 
             # Panel eksogen: bar chart
@@ -2154,7 +2185,7 @@ def page_prediksi():
                     bar.get_x() + bar.get_width()/2,
                     bar.get_height() + decomp_df["exogenous_orig"].max()*0.02,
                     f"{val:.4f}", ha="center", va="bottom",
-                    fontsize=7, color="#A0AEC0", fontfamily="monospace")
+                    fontsize=7, color="#475569", fontfamily="monospace")
             ax3d.set_xticks(xpos_d)
             ax3d.set_xticklabels(xlbls_d, rotation=30, ha="right", fontsize=8)
             ax3d.set_title(
@@ -2163,7 +2194,7 @@ def page_prediksi():
             ax3d.set_ylabel("Kontribusi", fontsize=9)
             ax3d.set_xlabel("Tanggal", fontsize=9)
             ax3d.legend(fontsize=9, framealpha=.3,
-                        facecolor="#1A202C", edgecolor="#2D3748")
+                        facecolor="#FFFFFF", edgecolor="#CBD5E0")
             ax3d.grid(True, alpha=.4, axis="y")
 
             for ax_ in axes_d[:3]:
@@ -2186,12 +2217,12 @@ def page_prediksi():
                 rows_d += (
                     f"<tr>"
                     f"<td>{row_['ds'].strftime('%B %Y')}</td>"
-                    f"<td style='color:#FC8181;'>{row_['y_orig']*100:.4f}%</td>"
-                    f"<td style='color:#63B3ED;font-weight:600;'>{row_['NBEATSx_orig']*100:.4f}%</td>"
-                    f"<td style='color:#68D391;'>{row_['trend_orig']*100:.4f}%</td>"
-                    f"<td style='color:#F6AD55;'>{row_['seasonality_orig']*100:.4f}%</td>"
-                    f"<td style='color:#63B3ED;'>{row_['exogenous_orig']*100:.4f}%</td>"
-                    f"<td style='color:#718096;font-size:0.78rem;'>"
+                    f"<td style='color:#DC2626;'>{row_['y_orig']*100:.4f}%</td>"
+                    f"<td style='color:#1D4ED8;font-weight:600;'>{row_['NBEATSx_orig']*100:.4f}%</td>"
+                    f"<td style='color:#059669;'>{row_['trend_orig']*100:.4f}%</td>"
+                    f"<td style='color:#D97706;'>{row_['seasonality_orig']*100:.4f}%</td>"
+                    f"<td style='color:#1D4ED8;'>{row_['exogenous_orig']*100:.4f}%</td>"
+                    f"<td style='color:#64748B;font-size:0.78rem;'>"
                     f"T:{row_['trend_pct']:.1f}% "
                     f"S:{row_['seasonality_pct']:.1f}% "
                     f"E:{row_['exogenous_pct']:.1f}%</td>"
@@ -2253,7 +2284,7 @@ def page_prediksi():
                 pu1, pu2, pu3 = st.columns(3)
                 for col_, (lbl, val, clr, desc) in zip(
                     [pu1, pu2, pu3],
-                    [("Proporsi Tren",    f"{avg_tu:.2f}%", "#68D391",
+                    [("Proporsi Tren",    f"{avg_tu:.2f}%", "#059669",
                       "Stack Trend (Blok 0–2)"),
                      ("Proporsi Musiman", f"{avg_su:.2f}%", "#F6AD55",
                       "Stack Seasonality (Blok 3–5)"),
@@ -2284,23 +2315,23 @@ def page_prediksi():
                           "o-", color="#63B3ED", lw=1.8, ms=4, label="Aktual")
                 ax0u.plot(fd, du_tot*100,
                           "s--", color="#FC8181", lw=1.8, ms=5, label="Prediksi")
-                ax0u.axvline(x=hist_ds[-1], color="#4A5568", lw=1, ls=":", alpha=0.8)
+                ax0u.axvline(x=hist_ds[-1], color="#94A3B8", lw=1, ls=":", alpha=0.8)
                 ax0u.set_title("Aktual vs Prediksi", fontsize=10, pad=8)
                 ax0u.set_ylabel("Inflasi (%)", fontsize=9)
                 ax0u.yaxis.set_major_formatter(
                     plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
                 ax0u.legend(fontsize=9, framealpha=.3,
-                            facecolor="#1A202C", edgecolor="#2D3748")
+                            facecolor="#FFFFFF", edgecolor="#CBD5E0")
                 ax0u.grid(True, alpha=.4)
 
                 for ax_, vals_, clr_, title_ in [
-                    (axes_u[1], du_t, "#68D391", "Komponen Trend"),
+                    (axes_u[1], du_t, "#059669", "Komponen Trend"),
                     (axes_u[2], du_s, "#F6AD55",
                      "Komponen Seasonality (Termasuk Efek Kalender)"),
                 ]:
                     ax_.plot(fd, vals_, "o-", color=clr_, lw=1.8, ms=4)
                     ax_.fill_between(fd, vals_, 0, alpha=0.12, color=clr_)
-                    ax_.axhline(y=0, color="#4A5568", lw=0.8, ls=":")
+                    ax_.axhline(y=0, color="#94A3B8", lw=0.8, ls=":")
                     ax_.set_title(title_, fontsize=10, pad=8)
                     ax_.set_ylabel("Kontribusi", fontsize=9)
                     ax_.grid(True, alpha=.4)
@@ -2317,7 +2348,7 @@ def page_prediksi():
                         bar_.get_x()+bar_.get_width()/2,
                         bar_.get_height()+abs(du_e.max())*0.02,
                         f"{val_:.4f}", ha="center", va="bottom",
-                        fontsize=7, color="#A0AEC0", fontfamily="monospace")
+                        fontsize=7, color="#475569", fontfamily="monospace")
                 ax3u.set_xticks(xpos_u)
                 ax3u.set_xticklabels(xlbls_u, rotation=30, ha="right", fontsize=8)
                 ax3u.set_title(
@@ -2326,7 +2357,7 @@ def page_prediksi():
                 ax3u.set_ylabel("Kontribusi", fontsize=9)
                 ax3u.set_xlabel("Periode Prediksi", fontsize=9)
                 ax3u.legend(fontsize=9, framealpha=.3,
-                            facecolor="#1A202C", edgecolor="#2D3748")
+                            facecolor="#FFFFFF", edgecolor="#CBD5E0")
                 ax3u.grid(True, alpha=.4, axis="y")
 
                 for ax_ in axes_u[:3]:
@@ -2348,11 +2379,11 @@ def page_prediksi():
                     rows_u += (
                         f"<tr>"
                         f"<td>{pd.to_datetime(d_).strftime('%B %Y')}</td>"
-                        f"<td style='color:#63B3ED;font-weight:600;'>{du_tot[i_]*100:.4f}%</td>"
-                        f"<td style='color:#68D391;'>{du_t[i_]:.4f}</td>"
-                        f"<td style='color:#F6AD55;'>{du_s[i_]:.4f}</td>"
-                        f"<td style='color:#63B3ED;'>{du_e[i_]:.4f}</td>"
-                        f"<td style='color:#718096;'>"
+                        f"<td style='color:#1D4ED8;font-weight:600;'>{du_tot[i_]*100:.4f}%</td>"
+                        f"<td style='color:#059669;'>{du_t[i_]:.4f}</td>"
+                        f"<td style='color:#D97706;'>{du_s[i_]:.4f}</td>"
+                        f"<td style='color:#1D4ED8;'>{du_e[i_]:.4f}</td>"
+                        f"<td style='color:#64748B;'>"
                         f"T:{pr_t:.1f}% S:{pr_s:.1f}% E:{pr_e:.1f}%</td>"
                         f"</tr>"
                     )
@@ -2457,7 +2488,7 @@ def page_prediksi():
         ]
         rows_c = ""
         for mdl, mae, rmse, smape, is_ours in comp:
-            s = "color:#63B3ED;font-weight:700;" if is_ours else "color:#A0AEC0;"
+            s = "color:#1D4ED8;font-weight:700;" if is_ours else "color:#475569;"
             r = "background:#0d1a2e;" if is_ours else ""
             rows_c += (
                 f"<tr style='{r}'>"
@@ -2472,7 +2503,7 @@ def page_prediksi():
                 <th>RMSE ↓</th><th>SMAPE ↓</th></tr>
                 {rows_c}
             </table>
-            <div style="font-size:.73rem;color:#4A5568;margin-top:6px;">
+            <div style="font-size:.73rem;color:#94A3B8;margin-top:6px;">
                 ★ = model yang dikembangkan · ↓ = semakin kecil semakin baik
             </div>""",
             unsafe_allow_html=True)
@@ -2493,9 +2524,9 @@ def page_prediksi():
                 <div class="metric-card" style="text-align:left;margin-bottom:.8rem;">
                     <div class="metric-label">{test}</div>
                     <div style="font-family:Space Mono,monospace;
-                         font-size:.82rem;color:#A0AEC0;margin:.3rem 0;">
+                         font-size:.82rem;color:#475569;margin:.3rem 0;">
                          {stat}</div>
-                    <div style="color:#68D391;font-size:.8rem;
+                    <div style="color:#059669;font-size:.8rem;
                          font-weight:600;">{result}</div>
                 </div>""", unsafe_allow_html=True)
 
