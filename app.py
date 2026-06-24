@@ -543,33 +543,6 @@ def page_home():
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='section-header'>Uji Asumsi Residual</div>",
-            unsafe_allow_html=True
-        )
-        residuals = [
-            ("Rata-rata Residual",       "ē = −0.004927", "Tidak bias sistematis"),
-            ("Normalitas (Shapiro-Wilk)","W=0.9152",      "p=0.2489 · Normal"),
-            ("Autokorelasi (Ljung-Box)", "Q=5.2282",      "p=0.5149 · Tidak autokorelasi."),
-            ("Homoskedastisitas (BP)",   "LM=8.8344",     "p=0.2648 · Homoskedastis"),
-        ]
-        for test, stat, desc in residuals:
-            st.markdown(
-                f"""<div style="background:#FFFFFF;border:1px solid #CBD5E0;
-                            border-radius:8px;padding:0.55rem 0.9rem;
-                            margin-bottom:0.45rem;display:flex;gap:0.6rem;align-items:center;">
-                    <div style="font-size:0.95rem;">✅</div>
-                    <div style="flex:1;">
-                        <div style="font-size:0.77rem;font-weight:600;color:#1E293B;">{test}</div>
-                        <div style="font-family:Space Mono,monospace;font-size:0.7rem;color:#1D4ED8;">
-                            {stat} &nbsp;·&nbsp; {desc}
-                        </div>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Alur Penggunaan ───────────────────────────────────────────
     st.markdown(
@@ -2511,26 +2484,6 @@ def page_peramalan():
             unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='section-header'>Uji Asumsi Residual (Data Penelitian)</div>",
-            unsafe_allow_html=True)
-        r1c, r2c = st.columns(2)
-        for i_, (test, stat, result) in enumerate([
-            ("Rata-rata Residual", "ē = −0.004927", "Mendekati nol ✅"),
-            ("Shapiro-Wilk",       "W=0.9152, p=0.2489", "Normal ✅"),
-            ("Ljung-Box (lag=6)",  "Q=5.2282, p=0.5149", "Tidak autokorelasi ✅"),
-            ("Breusch-Pagan",      "LM=8.8344, p=0.2648", "Homoskedastis ✅"),
-        ]):
-            with (r1c if i_ % 2 == 0 else r2c):
-                st.markdown(f"""
-                <div class="metric-card" style="text-align:left;margin-bottom:.8rem;">
-                    <div class="metric-label">{test}</div>
-                    <div style="font-family:Space Mono,monospace;
-                         font-size:.82rem;color:#475569;margin:.3rem 0;">
-                         {stat}</div>
-                    <div style="color:#059669;font-size:.8rem;
-                         font-weight:600;">{result}</div>
-                </div>""", unsafe_allow_html=True)
 
     # ════════════════════════════════════════════════════════
     # TAB 5 — PANDUAN
