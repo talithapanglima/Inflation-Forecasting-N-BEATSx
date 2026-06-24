@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 
 # ── Page Config ───────────────────────────────────────────────────
 st.set_page_config(
-    page_title="INFLASI.N-BEATSx — Prediksi Inflasi Indonesia",
+    page_title="Deep Learning Inflation Forecasting System",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -340,7 +340,7 @@ with st.sidebar:
         ('home',        '🏠', 'Home'),
         ('upload',      '📂', 'Upload Data'),
         ('visualisasi', '📊', 'Visualisasi Data'),
-        ('prediksi',    '📈', 'Prediksi Inflasi'),
+        ('peramalan',    '📈', 'Peramalan Inflasi'),
         ('about',       '👥', 'About Us'),
     ]
     for key, icon, label in pages:
@@ -406,18 +406,18 @@ def page_home():
                     </div>
                     <div style="font-size:0.85rem;color:#94A3B8;margin-top:4px;
                                 font-weight:400;letter-spacing:0.05em;">
-                        SISTEM PREDIKSI INFLASI INDONESIA
+                        SISTEM PERAMALAN INFLASI INDONESIA
                     </div>
                 </div>
             </div>
             <div style="font-size:1rem;color:#475569;line-height:1.8;max-width:680px;margin-bottom:2rem;">
-                Sistem prediksi inflasi berbasis model
+                Sistem peramalan inflasi berbasis model
                 <b style="color:#1D4ED8;">N-BEATSx</b>
                 yang dioptimasi dengan
                 <b style="color:#059669;">Bayesian Optimization.</b>
                 Model mengintegrasikan variabel makroekonomi — BI Rate,
                 kurs USD/IDR, dan harga minyak dunia — serta efek kalender hari besar
-                keagamaan untuk menghasilkan prediksi inflasi Indonesia hingga
+                keagamaan untuk menghasilkan peramalan inflasi Indonesia hingga
                 <b style="color:#D97706;">6 bulan ke depan</b>.
             </div>
             <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
@@ -449,7 +449,7 @@ def page_home():
         ("MAE",     "0.00601", "Mean Absolute Error",     "#1D4ED8"),
         ("RMSE",    "0.00834", "Root Mean Squared Error", "#1D4ED8"),
         ("SMAPE",   "41.76%",  "Symmetric MAPE",          "#D97706"),
-        ("Horizon", "6 Bulan", "Prediksi ke depan",       "#68D391"),
+        ("Horizon", "6 Bulan", "Proyeksi ke depan",       "#68D391"),
         ("Obs.",    "189",     "Data bulanan",             "#7C3AED"),
     ]
     for col, (label, val, sub, color) in zip([k1, k2, k3, k4, k5], kpis):
@@ -483,6 +483,7 @@ def page_home():
             ("N-BEATSx + BO ★", "0.00601", "0.00834", "41.76%", True),
             ("Prophet",          "0.00487", "0.00592", "43.96%", False),
             ("SARIMAX",          "0.00717", "0.00905", "46.40%", False),
+            ("LSTM",             "0.00964", "0.01149", "58,30%", False),
             ("N-BEATS",          "0.01039", "0.01223", "62.34%", False),
         ]
         rows_comp = ""
@@ -583,9 +584,9 @@ def page_home():
         ("02", "📊", "Visualisasi Data",
          "Eksplorasi pola historis dan tren variabel makroekonomi "
          "melalui grafik interaktif.", "visualisasi"),
-        ("03", "📈", "Prediksi Inflasi",
-         "Lihat prediksi 6 bulan ke depan dalam bentuk "
-         "grafik, tabel, dan metrik evaluasi model.", "prediksi"),
+        ("03", "📈", "Peramalan Inflasi",
+         "Lihat proyeksi 6 bulan ke depan dalam bentuk "
+         "grafik, tabel, dan metrik evaluasi model.", "proyeksi"),
     ]
     for col, (num, icon, title, desc, nav_key) in zip([sc1, sc2, sc3], steps):
         with col:
@@ -623,7 +624,7 @@ def page_home():
                 <div style="font-size:0.82rem;color:#64748B;line-height:1.7;">
                     Klik <b style="color:#1D4ED8;">Upload Data</b> di sidebar kiri
                     untuk mengunggah data historis terbaru, lalu buka halaman
-                    <b style="color:#1D4ED8;">Prediksi Inflasi</b> untuk melihat
+                    <b style="color:#1D4ED8;">Peramalan Inflasi</b> untuk melihat
                     proyeksi 6 bulan ke depan. Jika tidak ada data yang diunggah,
                     sistem menggunakan data bawaan model (Jan 2010 – Sep 2025) secara otomatis.
                 </div>
@@ -700,7 +701,7 @@ def decompose_forecast(nf, nf_trend, nf_season, df_scaled, fut_df, scaler_y):
 
 
 
-def render_decomp_tab(decomp, future_dates, label="Prediksi"):
+def render_decomp_tab(decomp, future_dates, label="Peramalan"):
     """
     Menampilkan hasil dekomposisi komponen N-BEATSx:
     grafik garis per komponen, grafik batang proporsi,
@@ -760,7 +761,7 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
 
     # ── Grafik 1: Garis per komponen (3 subplot) ─────────────────
     st.markdown(
-        "<div class='section-header'>Grafik Komponen Prediksi</div>",
+        "<div class='section-header'>Grafik Komponen Proyeksi</div>",
         unsafe_allow_html=True
     )
     fig1, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
@@ -875,7 +876,7 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     st.markdown(
         f"""<table class="pred-table">
             <tr>
-                <th>Periode</th><th>Total Prediksi</th>
+                <th>Periode</th><th>Total Proyeksi</th>
                 <th>Trend</th><th>Seasonality</th><th>Eksogen</th>
                 <th>% Trend</th><th>% Season</th><th>% Eksogen</th>
             </tr>
@@ -906,7 +907,7 @@ def render_decomp_tab(decomp, future_dates, label="Prediksi"):
     st.markdown("<br>", unsafe_allow_html=True)
     dl_decomp = pd.DataFrame({
         "Periode":              [d.strftime("%Y-%m") for d in dates],
-        "Total_Prediksi_%":     [f"{v*100:.4f}" for v in total_v],
+        "Total_Proyeksi_%":     [f"{v*100:.4f}" for v in total_v],
         "Trend_%":              [f"{v*100:.4f}" for v in trend_v],
         "Seasonality_%":        [f"{v*100:.4f}" for v in season_v],
         "Eksogen_%":            [f"{v*100:.4f}" for v in exog_v],
@@ -927,7 +928,7 @@ def page_upload():
         <div class="main-header">
             <div class="main-title">📂 Upload Data</div>
             <div class="main-subtitle">
-                Unggah dataset, atur variabel eksogen, dan jalankan prediksi kustom
+                Unggah dataset, atur variabel eksogen, dan jalankan peramalan kustom
             </div>
         </div>
         """,
@@ -1088,16 +1089,16 @@ def page_upload():
 
     st.divider()
 
-    # ── STEP 2: Konfigurasi Prediksi Kustom ──────────────────────
+    # ── STEP 2: Konfigurasi Peramalan Kustom ──────────────────────
     st.markdown(
-        "<div class='section-header'>② Konfigurasi Prediksi Kustom (6 Bulan ke Depan)</div>",
+        "<div class='section-header'>② Konfigurasi Peramalan Kustom (6 Bulan ke Depan)</div>",
         unsafe_allow_html=True
     )
     st.markdown(
         """
         <div class="info-box">
             Atur nilai variabel eksogen makroekonomi dan dummy kalender
-            untuk setiap bulan prediksi. Klik <b>Jalankan Prediksi</b>
+            untuk setiap bulan proyeksi. Klik <b>Jalankan Proyeksi</b>
             setelah semua nilai diisi.
         </div>
         """,
@@ -1125,7 +1126,7 @@ def page_upload():
     )
 
     # ── Input eksogen per bulan ───────────────────────────────────
-    st.markdown("**Variabel Makroekonomi per Bulan Prediksi**")
+    st.markdown("**Variabel Makroekonomi per Bulan Proyeksi**")
 
     # Ambil nilai default dari raw data (skala asli)
     last_bi = (
@@ -1239,15 +1240,15 @@ def page_upload():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Tombol Prediksi ───────────────────────────────────────────
+    # ── Tombol Proyeksi ───────────────────────────────────────────
     col_btn, _ = st.columns([1, 3])
     run_pred = col_btn.button(
-        "🚀  Jalankan Prediksi Kustom",
+        "🚀  Jalankan Peramalan Kustom",
         use_container_width=True
     )
     
     if run_pred:
-        with st.spinner("Menjalankan prediksi…"):
+        with st.spinner("Menjalankan proyeksi…"):
             try:
                 # ── Build df_scaled untuk input model ──────────────
                 # PENTING:
@@ -1302,7 +1303,7 @@ def page_upload():
                 st.session_state["custom_fut_df"] = fut_df.copy()
                 pred_ok = True
             except Exception as e:
-                st.error(f"❌ Prediksi gagal: {e}")
+                st.error(f"❌ Proyeksi gagal: {e}")
                 pred_ok = False
 
         if pred_ok:
@@ -1311,7 +1312,7 @@ def page_upload():
 
             st.divider()
             st.markdown(
-                "<div class='section-header'>③ Hasil Prediksi Kustom</div>",
+                "<div class='section-header'>③ Hasil Peramalan Kustom</div>",
                 unsafe_allow_html=True
             )
 
@@ -1329,7 +1330,7 @@ def page_upload():
             trend_col = "#059669" if pred_vals[-1] > pred_vals[0] else "#FC8181"
             for col, (lbl, val) in zip(
                 [mc1, mc2, mc3, mc4],
-                [("Prediksi Bulan 1",
+                [("Proyeksi Bulan 1",
                   f"{pred_vals[0]*100:.2f}%"),
                  ("Rata-rata 6 Bulan",
                   f"{np.mean(pred_vals)*100:.2f}%"),
@@ -1368,7 +1369,7 @@ def page_upload():
                         linestyle="--", alpha=0.5)
                 ax.plot(future_dates_res, pred_vals * 100,
                         color="#F6AD55", linewidth=2,
-                        marker="s", markersize=5, label="Prediksi Kustom")
+                        marker="s", markersize=5, label="Peramalan Kustom")
                 ax.fill_between(future_dates_res,
                                 pred_vals * 100 * 0.85,
                                 pred_vals * 100 * 1.15,
@@ -1395,7 +1396,7 @@ def page_upload():
                           facecolor="#FFFFFF", edgecolor="#CBD5E0")
                 ax.grid(True, alpha=0.4)
                 ax.set_title(
-                    "Prediksi Inflasi Kustom — N-BEATSx",
+                    "Peramalan Inflasi Kustom — N-BEATSx",
                     fontsize=10, pad=10, color="#1E293B",
                     fontfamily="monospace"
                 )
@@ -1427,7 +1428,7 @@ def page_upload():
                     <table class="pred-table">
                         <tr>
                             <th>Bulan</th>
-                            <th>Prediksi</th>
+                            <th>Proyeksi</th>
                             <th>BI Rate</th>
                             <th>Minyak</th>
                             <th>Kurs</th>
@@ -1445,7 +1446,7 @@ def page_upload():
                         pd.to_datetime(d).strftime("%Y-%m")
                         for d in future_dates_res
                     ],
-                    "Prediksi_Inflasi_%": [
+                    "Peramalan_Inflasi_%": [
                         f"{v*100:.4f}" for v in pred_vals
                     ],
                     "BI_Rate": [
@@ -1465,7 +1466,7 @@ def page_upload():
                     "⬇️ Download Hasil (CSV)",
                     pd.DataFrame(dl_data).to_csv(
                         index=False).encode("utf-8"),
-                    file_name="prediksi_kustom.csv",
+                    file_name="peramalan_kustom.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
@@ -1473,12 +1474,12 @@ def page_upload():
             # ── Tab Dekomposisi Kustom ────────────────────────────
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown(
-                "<div class='section-header'>Dekomposisi Komponen — Prediksi Kustom</div>",
+                "<div class='section-header'>Dekomposisi Komponen — Peramalan Kustom</div>",
                 unsafe_allow_html=True
             )
             st.markdown(
                 """<div class="info-box">
-                    Dekomposisi prediksi kustom berdasarkan nilai eksogen
+                    Dekomposisi peramalan kustom berdasarkan nilai eksogen
                     yang Anda masukkan. Komponen
                     <b style="color:#059669;">Trend</b>,
                     <b style="color:#D97706;">Seasonality</b>, dan
@@ -1491,13 +1492,13 @@ def page_upload():
                 render_decomp_tab(
                     st.session_state["custom_decomp"],
                     future_dates_res,
-                    label="Prediksi Kustom"
+                    label="peramalan Kustom"
                 )
 
     elif "custom_pred_vals" in st.session_state:
-        # Tampilkan hasil prediksi terakhir jika sudah pernah dijalankan
-        st.info("ℹ️ Menampilkan hasil prediksi terakhir. "
-                "Ubah nilai di atas dan klik 'Jalankan Prediksi' untuk memperbarui.")
+        # Tampilkan hasil proyeksi terakhir jika sudah pernah dijalankan
+        st.info("ℹ️ Menampilkan hasil proyeksi terakhir. "
+                "Ubah nilai di atas dan klik 'Jalankan Proyeksi' untuk memperbarui.")
 
 
 
@@ -1655,10 +1656,10 @@ def page_about():
                 tukar, tetapi juga oleh variasi musiman akibat hari besar
                 keagamaan yang menyebabkan fluktuasi harga periodik.
                 <br><br>
-                Metode prediksi konvensional umumnya memiliki keterbatasan
+                Metode peramalan konvensional umumnya memiliki keterbatasan
                 dalam menangkap hubungan nonlinier serta pengaruh variabel
                 eksogen dan variasi kalender secara simultan. Penelitian ini
-                mengembangkan model prediksi inflasi menggunakan <b>N-BEATSx</b>,
+                mengembangkan model peramalan inflasi menggunakan <b>N-BEATSx</b>,
                 model <i>deep learning</i> berbasis dekomposisi yang mampu
                 mengintegrasikan variabel eksogen makroekonomi dan efek
                 kalender dalam proses peramalan.
@@ -1669,14 +1670,14 @@ def page_about():
         st.markdown("<div class='section-header'>Tujuan Pengembangan</div>",
                     unsafe_allow_html=True)
         tujuan = [
-            ('01', 'Mengembangkan model prediksi inflasi Indonesia yang '
+            ('01', 'Mengembangkan model peramalan inflasi Indonesia yang '
                    'mengintegrasikan variabel makroekonomi dan efek kalender '
                    'hari besar keagamaan.'),
             ('02', 'Mengoptimasi hiperparameter model N-BEATSx menggunakan '
                    'Bayesian Optimization dua tahap dengan Optuna.'),
             ('03', 'Membandingkan performa N-BEATSx dengan model baseline '
-                   '(N-BEATS, Prophet, SARIMAX) pada data inflasi Indonesia.'),
-            ('04', 'Membangun sistem prediksi berbasis web yang dapat '
+                   '(N-BEATS, Prophet, SARIMAX, dan LSTM) pada data inflasi Indonesia.'),
+            ('04', 'Membangun sistem peramalan berbasis web yang dapat '
                    'digunakan sebagai alat bantu analisis inflasi.'),
         ]
         for num, desc in tujuan:
@@ -1744,12 +1745,12 @@ def page_about():
         st.markdown("<div class='section-header'>Manfaat Sistem</div>",
                     unsafe_allow_html=True)
         manfaat = [
-            ('🏛️', 'Pengambil kebijakan dapat menggunakan prediksi sebagai '
+            ('🏛️', 'Pengambil kebijakan dapat menggunakan proyeksi sebagai '
                    'referensi awal dalam perencanaan kebijakan moneter.'),
             ('📊', 'Analis ekonomi dapat mengeksplorasi pola historis dan '
                    'proyeksi inflasi secara interaktif.'),
             ('🎓', 'Kontribusi akademik dalam penerapan deep learning '
-                   'untuk prediksi variabel makroekonomi Indonesia.'),
+                   'untuk peramalan inflasi Indonesia.'),
         ]
         for icon, desc in manfaat:
             st.markdown(f"""
@@ -1783,7 +1784,7 @@ def page_about():
     <div class='info-box'>
         <b>Catatan:</b> Sistem ini dikembangkan sebagai bagian dari penelitian
         skripsi dengan fokus pada penerapan <i>deep learning</i> untuk
-        prediksi inflasi Indonesia. Prediksi yang dihasilkan bersifat
+        peramalan inflasi Indonesia. Peramalan yang dihasilkan bersifat
         indikatif dan tidak dapat menggantikan analisis kebijakan komprehensif
         oleh otoritas terkait.
     </div>""", unsafe_allow_html=True)
@@ -1791,12 +1792,12 @@ def page_about():
 
 
 
-def page_prediksi():
+def page_peramalan():
     st.markdown("""
     <div class='main-header'>
-        <div class='main-title'>📈 Prediksi Inflasi</div>
+        <div class='main-title'>📈 Peramalan Inflasi</div>
         <div class='main-subtitle'>
-            Hasil prediksi 6 bulan ke depan — Model N-BEATSx + Bayesian Optimization
+            Hasil peramalan 6 bulan ke depan — Model N-BEATSx + Bayesian Optimization
         </div>
     </div>""", unsafe_allow_html=True)
 
@@ -1810,7 +1811,7 @@ def page_prediksi():
     _default = st.session_state.uploaded_df is None
     use_raw  = full_data_raw if _default else st.session_state.uploaded_df
     src_lbl  = "Data Bawaan Model" if _default else "Data Upload"
-    # CEK APAKAH ADA HASIL PREDIKSI CUSTOM
+    # CEK APAKAH ADA HASIL PERAMALAN CUSTOM
     use_custom_forecast = (
         st.session_state.get("custom_pred_vals") is not None
         and st.session_state.get("custom_pred_dates") is not None
@@ -1884,11 +1885,11 @@ def page_prediksi():
         data_ok  = True
         if use_custom_forecast:
             st.success(
-                "Menggunakan hasil prediksi kustom terakhir."
+                "Menggunakan hasil peramalan kustom terakhir."
             )
     except Exception as e:
         import traceback
-        st.error(f"❌ Error prediksi: {e}")
+        st.error(f"❌ Error proyeksi: {e}")
         st.code(traceback.format_exc())
         data_ok = False
 
@@ -1901,15 +1902,15 @@ def page_prediksi():
     tc = "#059669" if pred_vals[-1] > pred_vals[0] else "#FC8181"
     for col, (lbl, val, sub) in zip(
         [c1, c2, c3, c4],
-        [("Prediksi Bulan Pertama",
+        [("Proyeksi Bulan Pertama",
           f"{pred_vals[0]*100:.2f}%",
           pd.to_datetime(future_dates[0]).strftime("%b %Y")),
          ("Rata-rata 6 Bulan",
-          f"{np.mean(pred_vals)*100:.2f}%", "Mean prediksi"),
+          f"{np.mean(pred_vals)*100:.2f}%", "Mean proyeksi"),
          ("Arah Tren",
           f"<span style='color:{tc};'>{td}</span>",
           f"{pred_vals[0]*100:.2f}% → {pred_vals[-1]*100:.2f}%"),
-         ("Horizon Prediksi", "6", "Bulan ke depan")]
+         ("Horizon Proyeksi", "6", "Bulan ke depan")]
     ):
         with col:
             st.markdown(f"""
@@ -1922,12 +1923,12 @@ def page_prediksi():
     st.markdown("<br>", unsafe_allow_html=True)
 
     tab1, tab2, tab_decomp, tab3, tab4 = st.tabs([
-        "📊 Grafik Prediksi", "📋 Tabel Hasil",
+        "📊 Grafik Proyeksi", "📋 Tabel Hasil",
         "🧩 Dekomposisi", "🔍 Analisis Model", "ℹ️ Panduan"
     ])
 
     # ════════════════════════════════════════════════════════
-    # TAB 1 — GRAFIK PREDIKSI
+    # TAB 1 — GRAFIK PROYEKSI
     # ════════════════════════════════════════════════════════
     with tab1:
         set_dark_style()
@@ -1942,15 +1943,15 @@ def page_prediksi():
                 color="#63B3ED", linewidth=1.8,
                 marker="o", markersize=3,
                 label=f"Aktual ({src_lbl})", zorder=3)
-        # Garis penghubung ke prediksi
+        # Garis penghubung ke peramalan
         ax.plot([show_ds[-1], pd.to_datetime(future_dates[0])],
                 [show_y[-1]*100, pred_vals[0]*100],
                 color="#F6AD55", linewidth=1.5, linestyle="--", alpha=0.6)
-        # Plot prediksi
+        # Plot peramalan
         ax.plot(future_dates, pred_vals * 100,
                 color="#F6AD55", linewidth=2,
                 marker="s", markersize=5,
-                label="Prediksi N-BEATSx", zorder=4)
+                label="Peramalan N-BEATSx", zorder=4)
         ax.fill_between(future_dates,
                         pred_vals*100*0.9, pred_vals*100*1.1,
                         alpha=0.1, color="#F6AD55",
@@ -1974,7 +1975,7 @@ def page_prediksi():
                   facecolor="#FFFFFF", edgecolor="#CBD5E0")
         ax.grid(True, alpha=0.4)
         ax.set_title(
-            f"Prediksi Inflasi Indonesia — N-BEATSx ({src_lbl})",
+            f"Peramalan Inflasi Indonesia — N-BEATSx ({src_lbl})",
             fontsize=11, pad=12, color="#1E293B", fontfamily="monospace")
         plt.tight_layout()
         st.pyplot(fig)
@@ -1984,7 +1985,7 @@ def page_prediksi():
         if not _default:
             st.markdown(
                 f"""<div class="success-box">
-                    ✅ Prediksi dihasilkan dari <b>data upload</b> kamu
+                    ✅ Proyeksi dihasilkan dari <b>data upload</b> kamu
                     ({len(hist_y)} observasi,
                     {hist_ds[0].strftime("%b %Y")} –
                     {hist_ds[-1].strftime("%b %Y")}).
@@ -2000,7 +2001,7 @@ def page_prediksi():
         if not _default:
             st.markdown(
                 f"""<div class="info-box">
-                    Prediksi dihasilkan dari <b>data upload</b>
+                    Proyeksi dihasilkan dari <b>data upload</b>
                     ({hist_ds[0].strftime("%b %Y")} –
                     {hist_ds[-1].strftime("%b %Y")},
                     {len(hist_y)} observasi).
@@ -2010,7 +2011,7 @@ def page_prediksi():
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(
-                "<div class='section-header'>Prediksi 6 Bulan ke Depan</div>",
+                "<div class='section-header'>Proyeksi 6 Bulan ke Depan</div>",
                 unsafe_allow_html=True)
             rows_p = ""
             for i, (d, v) in enumerate(zip(future_dates, pred_vals)):
@@ -2026,7 +2027,7 @@ def page_prediksi():
             st.markdown(
                 f"""<table class="pred-table">
                     <tr><th>#</th><th>Periode</th>
-                    <th>Prediksi</th><th>Kategori</th></tr>
+                    <th>Proyeksi</th><th>Kategori</th></tr>
                     {rows_p}
                 </table>""",
                 unsafe_allow_html=True)
@@ -2052,13 +2053,13 @@ def page_prediksi():
         dl_df = pd.DataFrame({
             "Periode": [pd.to_datetime(d).strftime("%Y-%m")
                         for d in future_dates],
-            "Prediksi_Inflasi_%": [f"{v*100:.4f}" for v in pred_vals],
+            "Peramalan_Inflasi_%": [f"{v*100:.4f}" for v in pred_vals],
             "Sumber_Data": src_lbl,
         })
         st.download_button(
-            "⬇️ Download Hasil Prediksi (CSV)",
+            "⬇️ Download Hasil Proyeksi(CSV)",
             dl_df.to_csv(index=False).encode("utf-8"),
-            file_name="prediksi_inflasi.csv", mime="text/csv")
+            file_name="proyeksi_inflasi.csv", mime="text/csv")
 
     # ════════════════════════════════════════════════════════
     # TAB 3 — DEKOMPOSISI
@@ -2142,12 +2143,12 @@ def page_prediksi():
                       "o-", color="#63B3ED", lw=1.8, ms=4, label="Aktual")
             ax0d.plot(ds_vals, decomp_df["NBEATSx_orig"]*100,
                       "s--", color="#FC8181", lw=1.8, ms=5,
-                      label="Prediksi N-BEATSx")
+                      label="Proyeksi N-BEATSx")
             ax0d.fill_between(ds_vals,
                               decomp_df["y_orig"]*100,
                               decomp_df["NBEATSx_orig"]*100,
                               alpha=0.1, color="#FC8181")
-            ax0d.set_title("Prediksi vs Aktual — Test Set",
+            ax0d.set_title("Proyeksi vs Aktual — Test Set",
                            fontsize=10, pad=8)
             ax0d.set_ylabel("Inflasi (%)", fontsize=9)
             ax0d.yaxis.set_major_formatter(
@@ -2232,7 +2233,7 @@ def page_prediksi():
                 f"""<table class="pred-table">
                     <tr>
                         <th>Periode</th><th>Aktual</th>
-                        <th>Prediksi</th><th>Tren</th>
+                        <th>Proyeksi</th><th>Tren</th>
                         <th>Musiman</th><th>Eksogen</th>
                         <th>Proporsi</th>
                     </tr>{rows_d}
@@ -2258,7 +2259,7 @@ def page_prediksi():
                     ({hist_ds.min().strftime("%b %Y")} –
                     {hist_ds.max().strftime("%b %Y")},
                     {len(df_feat)} observasi).
-                    Prediksi masa depan:
+                    Proyeksi masa depan:
                     {pd.to_datetime(future_dates[0]).strftime("%b %Y")} –
                     {pd.to_datetime(future_dates[-1]).strftime("%b %Y")}.
                 </div>""",
@@ -2314,9 +2315,9 @@ def page_prediksi():
                 ax0u.plot(hist_ds[-24:], hist_y[-24:]*100,
                           "o-", color="#63B3ED", lw=1.8, ms=4, label="Aktual")
                 ax0u.plot(fd, du_tot*100,
-                          "s--", color="#FC8181", lw=1.8, ms=5, label="Prediksi")
+                          "s--", color="#FC8181", lw=1.8, ms=5, label="Proyeksi")
                 ax0u.axvline(x=hist_ds[-1], color="#94A3B8", lw=1, ls=":", alpha=0.8)
-                ax0u.set_title("Aktual vs Prediksi", fontsize=10, pad=8)
+                ax0u.set_title("Aktual vs Proyeksi", fontsize=10, pad=8)
                 ax0u.set_ylabel("Inflasi (%)", fontsize=9)
                 ax0u.yaxis.set_major_formatter(
                     plt.FuncFormatter(lambda x, _: f"{x:.2f}%"))
@@ -2355,7 +2356,7 @@ def page_prediksi():
                     "Komponen Eksogen (BI Rate, Harga Minyak, Kurs, Lag)",
                     fontsize=10, pad=8)
                 ax3u.set_ylabel("Kontribusi", fontsize=9)
-                ax3u.set_xlabel("Periode Prediksi", fontsize=9)
+                ax3u.set_xlabel("Periode Peramalan", fontsize=9)
                 ax3u.legend(fontsize=9, framealpha=.3,
                             facecolor="#FFFFFF", edgecolor="#CBD5E0")
                 ax3u.grid(True, alpha=.4, axis="y")
@@ -2389,7 +2390,7 @@ def page_prediksi():
                     )
                 st.markdown(
                     f"""<table class="pred-table">
-                        <tr><th>Periode</th><th>Total Prediksi</th>
+                        <tr><th>Periode</th><th>Total Proyeksi</th>
                         <th>Trend</th><th>Seasonality</th>
                         <th>Eksogen</th><th>Proporsi</th></tr>
                         {rows_u}
@@ -2440,7 +2441,7 @@ def page_prediksi():
         else:
             # Hitung metrik dari data upload
             st.markdown(
-                "<div class='section-header'>Performa Prediksi pada Data Upload</div>",
+                "<div class='section-header'>Performa Proyeksi pada Data Upload</div>",
                 unsafe_allow_html=True)
             # Bandingkan pred_vals dengan hist_y terakhir (overlap jika ada)
             last_actuals = hist_y[-config["h"]:]
@@ -2467,7 +2468,7 @@ def page_prediksi():
                         </div>""", unsafe_allow_html=True)
                 st.markdown(
                     f"""<div class="info-box" style="margin-top:.75rem;">
-                        Metrik dihitung dari perbandingan prediksi masa depan
+                        Metrik dihitung dari perbandingan proyeksi masa depan
                         terhadap {config["h"]} observasi terakhir data upload
                         ({last_dates_a[0].strftime("%b %Y")} –
                         {last_dates_a[-1].strftime("%b %Y")}).
@@ -2484,6 +2485,7 @@ def page_prediksi():
             ("N-BEATSx + BO ★","0.00601","0.00834","41.76%", True),
             ("Prophet",         "0.00487","0.00592","43.96%", False),
             ("SARIMAX",         "0.00717","0.00905","46.40%", False),
+            ("LSTM",             "0.00964", "0.01149", "58,30%", False),
             ("N-BEATS",         "0.01039","0.01223","62.34%", False),
         ]
         rows_c = ""
@@ -2550,7 +2552,7 @@ def page_prediksi():
                 <b>Minimum:</b> 36 baris (3 tahun)
             </div>
             <div class="warning-box" style="margin-top:1rem;">
-                <b>Catatan:</b> Prediksi bersifat indikatif berdasarkan pola
+                <b>Catatan:</b> Proyeksi bersifat indikatif berdasarkan pola
                 historis. Model tidak dapat mengantisipasi kejadian ekstrem
                 yang tidak terwakili dalam data pelatihan.
             </div>""",
@@ -2564,5 +2566,5 @@ page = st.session_state.page
 if   page == 'home':        page_home()
 elif page == 'upload':      page_upload()
 elif page == 'visualisasi': page_visualisasi()
-elif page == 'prediksi':    page_prediksi()
+elif page == 'peramalan':    page_peramalan()
 elif page == 'about':       page_about()
