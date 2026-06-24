@@ -324,7 +324,7 @@ with st.sidebar:
     <div style='padding:1rem 0 0.5rem'>
         <div style='font-family:Space Mono,monospace;font-size:1.1rem;
                     font-weight:700;color:#1D4ED8;letter-spacing:1px;'>
-            INFLASI.N-BEATSx
+            Deep Learning Inflation Forecasting System
         </div>
         <div style='font-size:0.72rem;color:#94A3B8;margin-top:2px;'>
             N-BEATSx + Bayesian Optimization
@@ -402,7 +402,7 @@ def page_home():
                 <div>
                     <div style="font-family:Space Mono,monospace;font-size:2rem;
                                 font-weight:700;color:#1D4ED8;letter-spacing:-0.5px;line-height:1.1;">
-                        INFLASI.N-BEATSx
+                        Deep Learning Inflation Forecasting System
                     </div>
                     <div style="font-size:0.85rem;color:#94A3B8;margin-top:4px;
                                 font-weight:400;letter-spacing:0.05em;">
