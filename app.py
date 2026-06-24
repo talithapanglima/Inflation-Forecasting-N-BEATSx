@@ -341,7 +341,7 @@ with st.sidebar:
         ('upload',      '📂', 'Upload Data'),
         ('visualisasi', '📊', 'Visualisasi Data'),
         ('peramalan',    '📈', 'Peramalan Inflasi'),
-        ('about',       '👥', 'About Us'),
+        ('about',       '👥', 'About'),
     ]
     for key, icon, label in pages:
         active = st.session_state.page == key
@@ -1602,12 +1602,12 @@ def page_visualisasi():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# PAGE: ABOUT US
+# PAGE: ABOUT 
 # ═══════════════════════════════════════════════════════════════════
 def page_about():
     st.markdown("""
     <div class='main-header'>
-        <div class='main-title'>👥 About Us</div>
+        <div class='main-title'>👥 About</div>
         <div class='main-subtitle'>
             Latar belakang penelitian dan pengembangan sistem
         </div>
